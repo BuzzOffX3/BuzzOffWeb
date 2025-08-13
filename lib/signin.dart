@@ -66,7 +66,7 @@ class _SignInPageState extends State<SignInPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('images/bg.png', fit: BoxFit.cover),
+            child: Image.asset('images/bg.jpg', fit: BoxFit.cover),
           ),
           Center(
             child: Container(

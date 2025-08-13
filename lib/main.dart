@@ -1,9 +1,6 @@
-import 'package:buzzoffwebnew/Hospital/PatientManagement.dart';
 import 'package:buzzoffwebnew/Signin.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'Hospital/Patientform.dart';
-import 'Hospital/PatientManagement.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
