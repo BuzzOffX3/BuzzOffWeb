@@ -1138,7 +1138,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
             child: const Row(
               children: [
                 Expanded(flex: 1, child: _Hdr(' # ')),
-                Expanded(flex: 2, child: _Hdr('Name')),
+                Expanded(flex: 3, child: _Hdr('Name')),
                 Expanded(flex: 2, child: _Hdr('Gender')),
                 Expanded(flex: 1, child: _Hdr('Age')),
                 Expanded(flex: 3, child: _Hdr('Admission Date')),
