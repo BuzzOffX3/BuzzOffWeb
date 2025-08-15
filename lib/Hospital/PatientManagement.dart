@@ -1,17 +1,17 @@
-import 'dart:html' as html;
 import 'dart:convert';
+import 'dart:html' as html;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 🔐 auth for scoping
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'PatientForm.dart';
 import '../signin.dart';
 
 class PatientManagementPage extends StatefulWidget {
   const PatientManagementPage({super.key});
-
   @override
   State<PatientManagementPage> createState() => _PatientManagementPageState();
 }
@@ -22,31 +22,23 @@ const sectionTitleStyle = TextStyle(
   fontWeight: FontWeight.bold,
 );
 
-// ======= THEME (midnight blue + teal) =======
+// ======= THEME =======
 const _bg = Color(0xFF0C0F1A);
 const _sidebar = Color(0xFF121826);
 const _panel = Color(0xFF0F1522);
 const _panelAlt = Color(0xFF10182A);
 const _ink = Color(0xFF233049);
-const _primary = Color(0xFF00D3A7); // teal
+const _primary = Color(0xFF00D3A7);
 const _primaryDim = Color(0xFF00B895);
 const _chipBg = Color(0xFF1A2133);
-
-// --- Table palette ---
 const _tblHeaderBg = Color(0xFF19233A);
 const _tblRowA = Color(0xFF0F1522);
 const _tblRowB = Color(0xFF0C1220);
 const _tblBorder = Color(0xFF233049);
-
-// --- KPI sizing/spacing ---
-const double _kpiWidth = 300; // wider
+const double _kpiWidth = 300;
 const double _kpiHeight = 160;
 const double _kpiGap = 22;
-
-// --- Wider page max width ---
 const double _pageMaxWidth = 1560;
-
-// --- aliases used by the sidebar snippet ---
 const Color sidebar = _sidebar;
 const Color purple = _primary;
 const Color text = Colors.white;
@@ -55,14 +47,11 @@ const Color subtext = Colors.white70;
 class _PatientManagementPageState extends State<PatientManagementPage> {
   DocumentSnapshot? selectedPatient;
 
-  // 🔐 signed-in uid (null until available)
   String? _uid;
-
-  // Sidebar name (live from Firestore)
   String username = 'User';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSub;
 
-  // form controllers (right panel)
+  // right-panel controllers
   final TextEditingController nameController = TextEditingController();
   final TextEditingController genderController = TextEditingController();
   final TextEditingController guardianNameController = TextEditingController();
@@ -70,8 +59,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
-  final TextEditingController mohAreaController =
-      TextEditingController(); // patient MOH
+  final TextEditingController mohAreaController = TextEditingController();
+  final TextEditingController phiAreaController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   final TextEditingController wardNoController = TextEditingController();
   final TextEditingController bedNoController = TextEditingController();
@@ -82,28 +71,18 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   String? status;
   String? type;
 
-  // --- KPI/table filter state ---
-  String? _statusFilter; // 'Active', 'Recovered', 'Deceased' or null
+  // filters
+  String? _statusFilter;
   bool _filterRecoveredThisMonth = false;
-
-  // --- toolbar search ---
   String _searchQuery = '';
-
-  // --- saving guard ---
   bool _saving = false;
-
-  // --- table density ---
   bool _denseTable = false;
 
   @override
   void initState() {
     super.initState();
-
     _uid = FirebaseAuth.instance.currentUser?.uid;
-    if (_uid != null) {
-      _listenToUserProfile(_uid!);
-    }
-
+    if (_uid != null) _listenToUserProfile(_uid!);
     FirebaseAuth.instance.authStateChanges().listen((user) {
       setState(() => _uid = user?.uid);
       if (user?.uid != null) {
@@ -126,6 +105,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     phoneController.dispose();
     emailController.dispose();
     mohAreaController.dispose();
+    phiAreaController.dispose();
     addressController.dispose();
     wardNoController.dispose();
     bedNoController.dispose();
@@ -135,20 +115,18 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     super.dispose();
   }
 
-  // ===== Firestore profile helpers =====
+  // ===== profile helpers =====
   String _pickName(Map<String, dynamic> m) {
-    final keys = [
+    for (final k in [
       'display_name',
       'displayName',
       'name',
       'full_name',
       'username',
-    ];
-    for (final k in keys) {
+    ]) {
       final v = m[k];
-      if (v != null && v.toString().trim().isNotEmpty) {
+      if (v != null && v.toString().trim().isNotEmpty)
         return v.toString().trim();
-      }
     }
     return 'User';
   }
@@ -156,16 +134,11 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   Future<void> _listenToUserProfile(String uid) async {
     _profileSub?.cancel();
     final fs = FirebaseFirestore.instance;
-
-    // try users/{uid}, fallback to hospitals/{uid}
     DocumentReference<Map<String, dynamic>> ref = fs
         .collection('users')
         .doc(uid);
     final usersDoc = await ref.get();
-    if (!usersDoc.exists) {
-      ref = fs.collection('hospitals').doc(uid);
-    }
-
+    if (!usersDoc.exists) ref = fs.collection('hospitals').doc(uid);
     _profileSub = ref.snapshots().listen(
       (snap) {
         if (!snap.exists) return;
@@ -200,7 +173,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         .where('hospital_uid', isEqualTo: uid);
   }
 
-  // ---------- READ: prefer safe keys, fall back to legacy keys ----------
+  // ---------- READ populate ----------
   void populateForm(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
@@ -215,15 +188,15 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     phoneController.text = (data['phone_number'] ?? '').toString();
     emailController.text = (data['email'] ?? '').toString();
 
-    // 👇 patient’s MOH (not hospital scope)
     mohAreaController.text =
         (data['patient_moh_area'] ?? data['moh_area'] ?? '').toString();
+    phiAreaController.text =
+        (data['patient_phi_area'] ?? data['phi_area'] ?? '').toString();
 
     addressController.text = (data['address'] ?? '').toString();
     wardNoController.text = (data['ward_no'] ?? '').toString();
     bedNoController.text = (data['bed_no'] ?? '').toString();
 
-    // safe first, legacy fallbacks
     medicineController.text =
         (data['medicine'] ??
                 data['prescribed_medicine'] ??
@@ -259,7 +232,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     return age < 0 ? 0 : age;
   }
 
-  // last-N days bucket for sparkline series
   List<double> _bucketPerDay(Iterable<Timestamp> times, {int days = 14}) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -276,7 +248,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     return buckets;
   }
 
-  // ---------- WRITE: normalized status/type + timestamp sync ----------
+  // ---------- WRITE ----------
   Future<void> _saveChanges() async {
     if (selectedPatient == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -285,11 +257,9 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       return;
     }
 
-    // normalize
     final newStatus = (status ?? '').trim().toLowerCase();
     final newType = (type ?? '').trim().toLowerCase();
 
-    // guard accidental "deceased"
     if (newStatus == 'deceased') {
       final ok = await showDialog<bool>(
         context: context,
@@ -337,10 +307,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         'guardian_contact': guardianContactController.text.trim(),
         'phone_number': phoneController.text.trim(),
         'email': emailController.text.trim(),
-
-        // 👇 we edit the patient’s MOH, not scope fields
         'patient_moh_area': mohAreaController.text.trim(),
-
+        'patient_phi_area': phiAreaController.text.trim(),
         'address': addressController.text.trim(),
         'ward_no': wardNoController.text.trim(),
         'bed_no': bedNoController.text.trim(),
@@ -353,7 +321,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       if (newStatus.isNotEmpty) updates['status'] = newStatus;
       if (newType.isNotEmpty) updates['type'] = newType;
 
-      // ---- keep timestamps in sync with CURRENT status ----
       if (newStatus != oldStatus) {
         if (newStatus == 'recovered') {
           updates['recovered_at'] = FieldValue.serverTimestamp();
@@ -362,12 +329,10 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           updates['deceased_at'] = FieldValue.serverTimestamp();
           updates['recovered_at'] = null;
         } else {
-          // active / other: clear both milestone stamps
           updates['recovered_at'] = null;
           updates['deceased_at'] = null;
         }
       } else {
-        // keep consistent even if status text didn't change
         if (newStatus != 'recovered' && (old['recovered_at'] != null)) {
           updates['recovered_at'] = null;
         }
@@ -377,10 +342,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       }
 
       await docRef.set(updates, SetOptions(merge: true));
-
       selectedPatient = await docRef.get();
-      setState(() {});
-
+      if (mounted) setState(() {});
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Saved ✅')));
@@ -397,7 +360,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     }
   }
 
-  // ---- header + controls on the same row (wraps on small widths) ----
+  // ===== UI =====
   Widget _searchBox() {
     return SizedBox(
       width: 360,
@@ -406,7 +369,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.search, color: Colors.white54),
-          hintText: 'Search by name, patient MOH, or address',
+          hintText: 'Search by name, patient MOH/PHI, or address',
           hintStyle: const TextStyle(color: Colors.white38),
           filled: true,
           fillColor: _panelAlt,
@@ -468,7 +431,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           runSpacing: 12,
           children: [_searchBox(), _recoveredToggle(), _addPatientBtn()],
         );
-
         if (isNarrow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,7 +467,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
-  // ===== apply the SAME filters/search as the table (for reuse) =====
   List<QueryDocumentSnapshot> _applyFilters(
     List<QueryDocumentSnapshot> docs, {
     DateTime? startOfMonth,
@@ -517,7 +478,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     return docs.where((doc) {
       final d = doc.data() as Map<String, dynamic>;
 
-      // KPI status filter
       if (_statusFilter != null) {
         final s = (d['status'] ?? '').toString().toLowerCase();
         if (_statusFilter == 'Recovered' && _filterRecoveredThisMonth) {
@@ -531,14 +491,16 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         }
       }
 
-      // search filter
       if (_searchQuery.isNotEmpty) {
         final name = (d['fullname'] ?? '').toString().toLowerCase();
         final moh = (d['patient_moh_area'] ?? d['moh_area'] ?? '')
             .toString()
             .toLowerCase();
+        final phi = (d['patient_phi_area'] ?? d['phi_area'] ?? '')
+            .toString()
+            .toLowerCase();
         final addr = (d['address'] ?? '').toString().toLowerCase();
-        final hay = '$name $moh $addr';
+        final hay = '$name $moh $phi $addr';
         if (!hay.contains(_searchQuery)) return false;
       }
 
@@ -546,11 +508,9 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     }).toList();
   }
 
-  // ===== Export current filtered subset to CSV (web) =====
   Future<void> _exportCsv(List<QueryDocumentSnapshot> allDocs) async {
     try {
       final filtered = _applyFilters(allDocs);
-
       final rows = <List<String>>[];
       rows.add([
         '#',
@@ -560,6 +520,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         'Admission Date',
         'Status',
         'Patient MOH Area',
+        'Patient PHI Area',
         'Address',
         'Guardian Name',
         'Guardian Contact',
@@ -573,7 +534,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       ]);
 
       final df = DateFormat('yyyy-MM-dd');
-
       for (int i = 0; i < filtered.length; i++) {
         final data = filtered[i].data() as Map<String, dynamic>;
         final dob = data['date_of_birth'] as Timestamp?;
@@ -589,6 +549,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           admissionDate,
           (data['status'] ?? '').toString(),
           (data['patient_moh_area'] ?? data['moh_area'] ?? '').toString(),
+          (data['patient_phi_area'] ?? data['phi_area'] ?? '').toString(),
           (data['address'] ?? '').toString(),
           (data['guardian_name'] ?? data['guardian_name '] ?? '').toString(),
           (data['guardian_contact'] ?? '').toString(),
@@ -607,7 +568,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         ]);
       }
 
-      // Build CSV
       final csv = const ListToCsvConverter().convert(rows);
       final bytes = utf8.encode(csv);
       final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
@@ -635,7 +595,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         backgroundColor: _bg,
         body: Row(
           children: [
-            // ===== SIDEBAR (unified with Patient Form page) =====
+            // ===== SIDEBAR =====
             Container(
               width: 250,
               color: sidebar,
@@ -675,7 +635,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
                   _SideNavItem(
                     icon: Icons.dashboard_outlined,
                     label: 'Patient Form',
@@ -693,9 +652,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                   const _SideNavItem(
                     icon: Icons.receipt_long_outlined,
                     label: 'Patient Management',
-                    active: true, // current page
+                    active: true,
                   ),
-
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -793,7 +751,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
               ),
             ),
 
-            // ===== Right content — wider constraint to eat empty space
+            // ===== RIGHT CONTENT =====
             Expanded(
               child: Align(
                 alignment: Alignment.topCenter,
@@ -850,16 +808,15 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                               }
 
                               final docs = snap.data!.docs;
-
-                              // KPI numbers + series
                               int active = 0,
                                   deaths = 0,
                                   dischargedThisMonth = 0,
                                   totalThisMonth = 0;
-                              final admissionsAllTimes = <Timestamp>[];
-                              final recoveredTimes = <Timestamp>[];
-                              final deathTimes = <Timestamp>[];
-
+                              final List<Timestamp> admissionsAllTimes =
+                                  <Timestamp>[];
+                              final List<Timestamp> recoveredTimes =
+                                  <Timestamp>[];
+                              final List<Timestamp> deathTimes = <Timestamp>[];
                               final startOfMonth = _startOfThisMonth;
                               final startOfNext = _startOfNextMonth;
 
@@ -868,17 +825,14 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                 final s = (m['status'] ?? '')
                                     .toString()
                                     .toLowerCase();
-
                                 final doa = m['date_of_admission'];
                                 if (doa is Timestamp) {
                                   admissionsAllTimes.add(doa);
                                   final ad = doa.toDate();
                                   if (!ad.isBefore(startOfMonth) &&
-                                      ad.isBefore(startOfNext)) {
+                                      ad.isBefore(startOfNext))
                                     totalThisMonth++;
-                                  }
                                 }
-
                                 if (s == 'active') {
                                   active++;
                                 } else if (s == 'deceased') {
@@ -925,12 +879,10 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       selected:
                                           _statusFilter == null &&
                                           !_filterRecoveredThisMonth,
-                                      onTap: () {
-                                        setState(() {
-                                          _statusFilter = null;
-                                          _filterRecoveredThisMonth = false;
-                                        });
-                                      },
+                                      onTap: () => setState(() {
+                                        _statusFilter = null;
+                                        _filterRecoveredThisMonth = false;
+                                      }),
                                       width: _kpiWidth,
                                       height: _kpiHeight,
                                     ),
@@ -942,17 +894,15 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       selected:
                                           _statusFilter == 'Active' &&
                                           !_filterRecoveredThisMonth,
-                                      onTap: () {
-                                        setState(() {
-                                          if (_statusFilter == 'Active' &&
-                                              !_filterRecoveredThisMonth) {
-                                            _statusFilter = null;
-                                          } else {
-                                            _statusFilter = 'Active';
-                                            _filterRecoveredThisMonth = false;
-                                          }
-                                        });
-                                      },
+                                      onTap: () => setState(() {
+                                        if (_statusFilter == 'Active' &&
+                                            !_filterRecoveredThisMonth) {
+                                          _statusFilter = null;
+                                        } else {
+                                          _statusFilter = 'Active';
+                                          _filterRecoveredThisMonth = false;
+                                        }
+                                      }),
                                       width: _kpiWidth,
                                       height: _kpiHeight,
                                     ),
@@ -964,18 +914,16 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       selected:
                                           _statusFilter == 'Recovered' &&
                                           _filterRecoveredThisMonth,
-                                      onTap: () {
-                                        setState(() {
-                                          if (_statusFilter == 'Recovered' &&
-                                              _filterRecoveredThisMonth) {
-                                            _statusFilter = null;
-                                            _filterRecoveredThisMonth = false;
-                                          } else {
-                                            _statusFilter = 'Recovered';
-                                            _filterRecoveredThisMonth = true;
-                                          }
-                                        });
-                                      },
+                                      onTap: () => setState(() {
+                                        if (_statusFilter == 'Recovered' &&
+                                            _filterRecoveredThisMonth) {
+                                          _statusFilter = null;
+                                          _filterRecoveredThisMonth = false;
+                                        } else {
+                                          _statusFilter = 'Recovered';
+                                          _filterRecoveredThisMonth = true;
+                                        }
+                                      }),
                                       width: _kpiWidth,
                                       height: _kpiHeight,
                                     ),
@@ -987,17 +935,15 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       selected:
                                           _statusFilter == 'Deceased' &&
                                           !_filterRecoveredThisMonth,
-                                      onTap: () {
-                                        setState(() {
-                                          if (_statusFilter == 'Deceased' &&
-                                              !_filterRecoveredThisMonth) {
-                                            _statusFilter = null;
-                                          } else {
-                                            _statusFilter = 'Deceased';
-                                            _filterRecoveredThisMonth = false;
-                                          }
-                                        });
-                                      },
+                                      onTap: () => setState(() {
+                                        if (_statusFilter == 'Deceased' &&
+                                            !_filterRecoveredThisMonth) {
+                                          _statusFilter = null;
+                                        } else {
+                                          _statusFilter = 'Deceased';
+                                          _filterRecoveredThisMonth = false;
+                                        }
+                                      }),
                                       width: _kpiWidth,
                                       height: _kpiHeight,
                                     ),
@@ -1013,7 +959,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                         Expanded(
                           child: Row(
                             children: [
-                              // table takes remaining width
                               Expanded(
                                 child: _uid == null
                                     ? const Center(
@@ -1057,7 +1002,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              // ---- Report Toolbar
                                               Row(
                                                 children: [
                                                   ElevatedButton.icon(
@@ -1148,8 +1092,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                                 ],
                                               ),
                                               const SizedBox(height: 10),
-
-                                              // ---- Table ----
                                               Expanded(
                                                 child: _buildPatientTableBody(
                                                   filtered,
@@ -1161,7 +1103,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       ),
                               ),
                               const SizedBox(width: 16),
-                              // fixed-width right panel (wider)
                               SizedBox(width: 380, child: buildPatientForm()),
                             ],
                           ),
@@ -1178,10 +1119,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
-  // Only the body of the table (header moved here via first row)
   Widget _buildPatientTableBody(List<QueryDocumentSnapshot> docs) {
     final double vPad = _denseTable ? 8 : 14;
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.transparent,
@@ -1190,7 +1129,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Table Header
           Container(
             padding: EdgeInsets.symmetric(vertical: vPad, horizontal: 12),
             decoration: const BoxDecoration(
@@ -1200,18 +1138,17 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
             child: const Row(
               children: [
                 Expanded(flex: 1, child: _Hdr(' # ')),
-                Expanded(flex: 3, child: _Hdr('Name')),
+                Expanded(flex: 2, child: _Hdr('Name')),
                 Expanded(flex: 2, child: _Hdr('Gender')),
                 Expanded(flex: 1, child: _Hdr('Age')),
                 Expanded(flex: 3, child: _Hdr('Admission Date')),
                 Expanded(flex: 2, child: _Hdr('Status')),
-                Expanded(flex: 2, child: _Hdr('Patient MOH Area')),
+                Expanded(flex: 2, child: _Hdr('MOH Area')),
+                Expanded(flex: 2, child: _Hdr('PHI Area')),
                 Expanded(flex: 3, child: _Hdr('Address')),
               ],
             ),
           ),
-
-          // Table Content
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
@@ -1231,7 +1168,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                   final admissionDate = doa != null
                       ? DateFormat('yyyy-MM-dd').format(doa.toDate())
                       : '-';
-
                   final rowColor = index.isEven ? _tblRowA : _tblRowB;
 
                   return InkWell(
@@ -1252,39 +1188,40 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                       ),
                       child: Row(
                         children: [
+                          const SizedBox(width: 4),
                           Expanded(
                             flex: 1,
                             child: Text(
                               '${index + 1}',
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               (data['fullname'] ?? '').toString(),
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 2,
                             child: Text(
                               (data['gender'] ?? '').toString(),
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 1,
                             child: Text(
                               '$age',
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               admissionDate,
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
@@ -1306,14 +1243,24 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       data['moh_area'] ??
                                       '')
                                   .toString(),
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              (data['patient_phi_area'] ??
+                                      data['phi_area'] ??
+                                      '')
+                                  .toString(),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               (data['address'] ?? '').toString(),
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                         ],
@@ -1329,7 +1276,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
-  // ===== EMPTY-STATE-AWARE RIGHT PANEL =====
+  // ===== RIGHT PANEL =====
   Widget buildPatientForm() {
     final panel = Container(
       decoration: BoxDecoration(
@@ -1339,74 +1286,14 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           BoxShadow(
             color: Colors.black.withOpacity(0.35),
             blurRadius: 10,
-            offset: const Offset(2, 4),
+            offset: Offset(2, 4),
           ),
         ],
         border: Border.all(color: _ink.withOpacity(.35)),
       ),
       padding: const EdgeInsets.all(18),
       child: selectedPatient == null
-          // ---- EMPTY STATE ----
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircleAvatar(
-                    radius: 34,
-                    backgroundColor: _primary,
-                    child: Icon(
-                      Icons.person_search,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'No patient selected',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Select a row from the table to view/edit details\nor add a new patient.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white60, fontSize: 13),
-                  ),
-                  const SizedBox(height: 14),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder: (context, a1, a2) =>
-                              const PatientFormPage(),
-                          transitionDuration: Duration.zero,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.add, color: Colors.white),
-                    label: const Text(
-                      'Add Patient',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primary,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 11,
-                        horizontal: 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          // ---- EXISTING FORM ----
+          ? _emptyPanel()
           : SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1438,10 +1325,18 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     'Full Name',
                     icon: Icons.person,
                   ),
-                  buildTextField(
-                    genderController,
+
+                  // ✅ Gender as dropdown
+                  buildDropdown(
                     'Gender',
-                    icon: Icons.transgender,
+                    genderController.text.isEmpty
+                        ? null
+                        : genderController.text,
+                    const ['Male', 'Female', 'Other'],
+                    (val) {
+                      genderController.text = val ?? '';
+                      setState(() {});
+                    },
                   ),
 
                   const SizedBox(height: 8),
@@ -1471,11 +1366,18 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                   const SizedBox(height: 8),
                   const Text('Hospital Information', style: sectionTitleStyle),
                   const SizedBox(height: 8),
-                  buildTextField(
-                    mohAreaController,
-                    'Patient MOH Area',
-                    icon: Icons.location_on,
+
+                  // 👇 MOH → PHI picker (asset fallback)
+                  MohPhiPickerInline(
+                    initialMoh: mohAreaController.text,
+                    initialPhi: phiAreaController.text,
+                    onChanged: (moh, phi) {
+                      mohAreaController.text = moh ?? '';
+                      phiAreaController.text = phi ?? '';
+                      setState(() {});
+                    },
                   ),
+
                   buildTextField(
                     addressController,
                     'Address',
@@ -1559,7 +1461,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     ),
                     onPressed: _saving ? null : _saveChanges,
                   ),
-
                   const SizedBox(height: 12),
                   Text(
                     'Last Updated: ${DateFormat.yMd().format(DateTime.now())}',
@@ -1569,8 +1470,61 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
               ),
             ),
     );
-
     return panel;
+  }
+
+  Widget _emptyPanel() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircleAvatar(
+            radius: 34,
+            backgroundColor: _primary,
+            child: Icon(Icons.person_search, color: Colors.white, size: 32),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'No patient selected',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Select a row from the table to view/edit details\nor add a new patient.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (context, a1, a2) => const PatientFormPage(),
+                  transitionDuration: Duration.zero,
+                ),
+              );
+            },
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text(
+              'Add Patient',
+              style: TextStyle(color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget buildTextField(
@@ -1607,7 +1561,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: DropdownButtonFormField<String>(
-        value: value.isEmptyOrNull ? null : value,
+        value: (value == null || value.isEmpty) ? null : value,
         dropdownColor: _panelAlt,
         decoration: InputDecoration(
           labelText: label,
@@ -1632,7 +1586,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
-  // ===== KPI card with real mini area chart (no overflow) =====
   Widget statCardDynamic({
     required String title,
     required String value,
@@ -1709,14 +1662,13 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   }
 }
 
-// ===== helper widgets/classes =====
+// ===== helpers =====
 
 class _SideNavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback? onTap;
-
   const _SideNavItem({
     super.key,
     required this.icon,
@@ -1724,7 +1676,6 @@ class _SideNavItem extends StatelessWidget {
     this.active = false,
     this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1767,7 +1718,6 @@ class _SideNavItem extends StatelessWidget {
 class _Hdr extends StatelessWidget {
   final String label;
   const _Hdr(this.label);
-
   @override
   Widget build(BuildContext context) {
     return Text(
@@ -1796,14 +1746,12 @@ class MiniAreaChart extends StatelessWidget {
   final List<double> data;
   final Color color;
   const MiniAreaChart({super.key, required this.data, required this.color});
-
   @override
   Widget build(BuildContext context) {
     final double maxVal = data.isEmpty
         ? 1
         : data.reduce((a, b) => a > b ? a : b);
-    final double top = maxVal <= 0 ? 1 : maxVal * 1.25; // headroom
-
+    final double top = maxVal <= 0 ? 1 : maxVal * 1.25;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: LineChart(
@@ -1851,11 +1799,11 @@ extension NullableString on String? {
 Color getStatusColor(String status) {
   switch (status.toLowerCase()) {
     case 'active':
-      return const Color(0xFFF4C430); // warm yellow
+      return const Color(0xFFF4C430);
     case 'recovered':
-      return const Color(0xFF3DDC97); // green
+      return const Color(0xFF3DDC97);
     case 'deceased':
-      return const Color(0xFFFF5C5C); // red
+      return const Color(0xFFFF5C5C);
     default:
       return Colors.grey;
   }
@@ -1864,10 +1812,7 @@ Color getStatusColor(String status) {
 // ===== simple CSV converter =====
 class ListToCsvConverter {
   const ListToCsvConverter();
-  String convert(List<List<String>> rows) {
-    return rows.map(_toCsvRow).join('\n');
-  }
-
+  String convert(List<List<String>> rows) => rows.map(_toCsvRow).join('\n');
   String _toCsvRow(List<String> row) {
     return row
         .map((cell) {
@@ -1877,5 +1822,206 @@ class ListToCsvConverter {
           return needsQuotes ? '"$out"' : out;
         })
         .join(',');
+  }
+}
+
+/// =================== MOH → PHI picker with Firestore *or* asset fallback ===================
+class MohPhiPickerInline extends StatefulWidget {
+  final String? initialMoh;
+  final String? initialPhi;
+  final void Function(String? moh, String? phi) onChanged;
+  final bool phiRequired;
+
+  const MohPhiPickerInline({
+    super.key,
+    this.initialMoh,
+    this.initialPhi,
+    required this.onChanged,
+    this.phiRequired = false,
+  });
+
+  @override
+  State<MohPhiPickerInline> createState() => _MohPhiPickerInlineState();
+}
+
+class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
+  final _mohKey = GlobalKey<FormFieldState<String>>();
+  final _phiKey = GlobalKey<FormFieldState<String>>();
+
+  bool _loading = true;
+  String? _error; // 👈 show what went wrong
+
+  Map<String, List<String>> _map = {};
+  List<String> _mohList = [];
+  List<String> _phiList = [];
+  String? _moh;
+  String? _phi;
+
+  String _titleCase(String s) {
+    final t = s.trim().toLowerCase();
+    if (t.isEmpty) return t;
+    return t
+        .split(RegExp(r'\s+'))
+        .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
+        .join(' ');
+  }
+
+  Future<void> _load() async {
+    try {
+      // ✅ Asset-only for now (no Firestore dependency)
+      final jsonStr = await rootBundle.loadString('images/phi_area.json');
+      final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      final normalized = <String, List<String>>{};
+      for (final e in raw.entries) {
+        final moh = _titleCase(e.key.toString());
+        final items =
+            (e.value as List)
+                .map((v) => _titleCase(v.toString()))
+                .toSet()
+                .toList()
+              ..sort();
+        normalized[moh] = items;
+      }
+      final mohs = normalized.keys.toList()..sort();
+
+      if (!mounted) return;
+      setState(() {
+        _map = normalized;
+        _mohList = mohs;
+        _loading = false;
+        _error = null;
+      });
+
+      // initial selection
+      if (widget.initialMoh != null && widget.initialMoh!.trim().isNotEmpty) {
+        _onMohChanged(
+          _titleCase(widget.initialMoh!),
+          initialPhi: widget.initialPhi == null
+              ? null
+              : _titleCase(widget.initialPhi!),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Couldn\'t load refassets/phi_area.json: $e';
+      });
+    }
+  }
+
+  void _emit() => widget.onChanged(_moh, _phi);
+
+  void _onMohChanged(String? moh, {String? initialPhi}) {
+    setState(() {
+      _moh = moh;
+      _phiList = moh == null ? [] : (_map[moh] ?? const <String>[]);
+      _phi = (initialPhi != null && _phiList.contains(initialPhi))
+          ? initialPhi
+          : null;
+    });
+    _emit();
+    _mohKey.currentState?.validate();
+    _phiKey.currentState?.validate();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 10),
+        child: LinearProgressIndicator(),
+      );
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          key: _mohKey,
+          value: _moh,
+          dropdownColor: _panelAlt,
+          items: _mohList
+              .map(
+                (m) => DropdownMenuItem(
+                  value: m,
+                  child: Text(m, style: const TextStyle(color: Colors.white)),
+                ),
+              )
+              .toList(),
+          onChanged: (v) => _onMohChanged(v),
+          decoration: InputDecoration(
+            labelText: 'Patient MOH Area *',
+            labelStyle: const TextStyle(color: Colors.white70),
+            prefixIcon: const Icon(Icons.location_on, color: Colors.white54),
+            filled: true,
+            fillColor: _panelAlt,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: _ink.withOpacity(.35)),
+            ),
+          ),
+          validator: (v) => (v == null || v.isEmpty) ? 'Select MOH area' : null,
+        ),
+        const SizedBox(height: 10),
+        AbsorbPointer(
+          absorbing: _phiList.isEmpty,
+          child: DropdownButtonFormField<String>(
+            key: _phiKey,
+            value: _phiList.contains(_phi) ? _phi : null,
+            dropdownColor: _panelAlt,
+            items: _phiList
+                .map(
+                  (p) => DropdownMenuItem(
+                    value: p,
+                    child: Text(p, style: const TextStyle(color: Colors.white)),
+                  ),
+                )
+                .toList(),
+            onChanged: (v) {
+              setState(() => _phi = v);
+              _emit();
+            },
+            decoration: InputDecoration(
+              labelText: widget.phiRequired
+                  ? 'PHI Area *'
+                  : 'PHI Area (optional)',
+              labelStyle: const TextStyle(color: Colors.white70),
+              helperText: _phiList.isEmpty
+                  ? 'Select MOH first'
+                  : 'Filtered by MOH',
+              helperStyle: const TextStyle(color: Colors.white38),
+              prefixIcon: const Icon(Icons.badge, color: Colors.white54),
+              filled: true,
+              fillColor: _panelAlt,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: _ink.withOpacity(.35)),
+              ),
+            ),
+            validator: (v) {
+              if (widget.phiRequired) {
+                if (_moh == null || _moh!.isEmpty) return 'Pick MOH first';
+                if (v == null || v.isEmpty) return 'Select PHI area';
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
+    );
   }
 }

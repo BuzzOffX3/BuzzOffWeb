@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:buzzoffwebnew/MOH/complaints.dart';
 import 'package:buzzoffwebnew/MOH/MapPage.dart';
 import 'package:buzzoffwebnew/signin.dart';
@@ -10,7 +11,6 @@ import 'package:buzzoffwebnew/signin.dart';
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
 
-  // Palette
   static const Color bg = Color(0xFF0F1115);
   static const Color sidebar = Color(0xFF14161B);
   static const Color panel = Color(0xFF13161C);
@@ -25,8 +25,22 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
+/* ---------------- helpers for MOH key variants (match any case) ---------------- */
+String _titleCase(String s) {
+  final t = s.trim().toLowerCase();
+  if (t.isEmpty) return t;
+  return t
+      .split(RegExp(r'\s+'))
+      .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
+      .join(' ');
+}
+
+List<String> areaKeys(String raw) {
+  final t = raw.trim();
+  return {t, t.toLowerCase(), _titleCase(t), t.toUpperCase()}.toList();
+}
+
 class _AnalyticsPageState extends State<AnalyticsPage> {
-  // ==== Bucketing helper for mini KPI sparklines (last N days) ====
   List<double> _bucketPerDay(Iterable<Timestamp> times, {int days = 30}) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -43,12 +57,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return buckets;
   }
 
-  // MOH-scoped streams (use 'admit_hospital_moh' if that’s your field)
+  /* ---------------- MOH-scoped streams (no orderBy needed for KPIs) ---------------- */
   Stream<QuerySnapshot<Map<String, dynamic>>> _casesStreamForMoh(String moh) {
     return FirebaseFirestore.instance
         .collection('dengue_cases')
-        .where('patient_moh_area', isEqualTo: moh)
-        .orderBy('date_of_admission', descending: true)
+        .where('patient_moh_area', whereIn: areaKeys(moh))
         .snapshots();
   }
 
@@ -57,7 +70,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   ) {
     return FirebaseFirestore.instance
         .collection('complaints')
-        .where('moh_area', isEqualTo: moh)
+        .where('moh_area', whereIn: areaKeys(moh))
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
@@ -68,10 +81,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       backgroundColor: AnalyticsPage.bg,
       body: Row(
         children: [
-          // ===== SIDEBAR =====
           _Sidebar(),
-
-          // ===== MAIN =====
           Expanded(
             child: SafeArea(
               child: Center(
@@ -83,7 +93,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       style: const TextStyle(color: AnalyticsPage.text),
                       child: _BuildWithMoh(
                         childBuilder: (context, mohArea) {
-                          // MOH streams
                           final casesStream = _casesStreamForMoh(mohArea);
                           final complaintsStream = _complaintsStreamForMoh(
                             mohArea,
@@ -94,55 +103,70 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               const _Header(),
                               const SizedBox(height: 20),
 
-                              // ==== KPIs (MOH-scoped) ====
+                              // ======= KPIs (UNCHANGED) =======
                               StreamBuilder<
                                 QuerySnapshot<Map<String, dynamic>>
                               >(
                                 stream: casesStream,
                                 builder: (context, casesSnap) {
-                                  int totalCases = 0,
-                                      activeCases = 0,
-                                      last30 = 0,
-                                      prev30 = 0;
+                                  int totalCases = 0;
+                                  int activeCases = 0;
                                   final admissions = <Timestamp>[];
 
                                   final now = DateTime.now();
-                                  final startThis30 = DateTime(
+                                  final startThisMonth = DateTime(
                                     now.year,
                                     now.month,
-                                    now.day,
-                                  ).subtract(const Duration(days: 29));
-                                  final startPrev30 = startThis30.subtract(
-                                    const Duration(days: 30),
+                                    1,
                                   );
+                                  final startNextMonth = DateTime(
+                                    now.year,
+                                    now.month + 1,
+                                    1,
+                                  );
+                                  final startPrevMonth = DateTime(
+                                    now.year,
+                                    now.month - 1,
+                                    1,
+                                  );
+
+                                  int thisMonthCount = 0;
+                                  int prevMonthCount = 0;
 
                                   if (casesSnap.hasData) {
                                     for (final d in casesSnap.data!.docs) {
                                       final m = d.data();
+                                      totalCases++;
+
                                       final status = (m['status'] ?? '')
                                           .toString()
-                                          .toLowerCase();
+                                          .toLowerCase()
+                                          .trim();
                                       if (status == 'active') activeCases++;
-                                      totalCases++;
 
                                       final ts = m['date_of_admission'];
                                       if (ts is Timestamp) {
                                         admissions.add(ts);
                                         final dt = ts.toDate();
-                                        if (!dt.isBefore(startThis30)) {
-                                          last30++;
-                                        } else if (!dt.isBefore(startPrev30) &&
-                                            dt.isBefore(startThis30)) {
-                                          prev30++;
+                                        if (!dt.isBefore(startThisMonth) &&
+                                            dt.isBefore(startNextMonth)) {
+                                          thisMonthCount++;
+                                        } else if (!dt.isBefore(
+                                              startPrevMonth,
+                                            ) &&
+                                            dt.isBefore(startThisMonth)) {
+                                          prevMonthCount++;
                                         }
                                       }
                                     }
                                   }
 
                                   final seriesCases = _bucketPerDay(admissions);
-                                  final growthPct = prev30 == 0
-                                      ? (last30 > 0 ? 100.0 : 0.0)
-                                      : ((last30 - prev30) / prev30) * 100.0;
+                                  final growthPct = prevMonthCount == 0
+                                      ? (thisMonthCount > 0 ? 100.0 : 0.0)
+                                      : ((thisMonthCount - prevMonthCount) /
+                                                prevMonthCount) *
+                                            100.0;
 
                                   return StreamBuilder<
                                     QuerySnapshot<Map<String, dynamic>>
@@ -156,8 +180,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                             compSnap.data!.docs.length;
                                         for (final d in compSnap.data!.docs) {
                                           final ts = d.data()['timestamp'];
-                                          if (ts is Timestamp)
+                                          if (ts is Timestamp) {
                                             compTimes.add(ts);
+                                          }
                                         }
                                       }
                                       final seriesComplaints = _bucketPerDay(
@@ -179,10 +204,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                           const SizedBox(width: 16),
                                           Expanded(
                                             child: KpiCardBig(
-                                              title: 'Case Growth (30d)',
+                                              title: 'Case Growth (MoM)',
                                               value:
                                                   '${growthPct.isNaN ? 0 : growthPct.toStringAsFixed(1)}%',
-                                              hint: 'vs prev 30d • $mohArea',
+                                              hint:
+                                                  'This month vs last • $mohArea',
                                               series: seriesCases,
                                               color: const Color(0xFF6EA8FE),
                                               height: 160,
@@ -193,7 +219,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                             child: KpiCardBig(
                                               title: 'Total Complaints',
                                               value: '$totalComplaints',
-                                              hint: 'last 30d series',
+                                              hint: 'Last 30d series',
                                               series: seriesComplaints,
                                               color: const Color(0xFF5FD7C5),
                                               height: 160,
@@ -202,7 +228,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                           const SizedBox(width: 16),
                                           Expanded(
                                             child: KpiCardBig(
-                                              title: 'Active Cases',
+                                              title: 'Active Dengue Cases',
                                               value: '$activeCases',
                                               hint: 'status = Active',
                                               series: seriesCases,
@@ -219,14 +245,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                               const SizedBox(height: 20),
 
-                              // ==== BODY ====
+                              // ======= BODY =======
                               Expanded(
                                 child: SingleChildScrollView(
                                   child: Column(
                                     children: [
                                       const SizedBox(height: 16),
 
-                                      // UPDATED first chart: BAR chart scoped to MOH
+                                      // Row 1: Yearly chart (UNCHANGED) + Report (kept)
                                       _RowWithReport(
                                         left: _YearlyCasesBarCard(
                                           mohArea: mohArea,
@@ -236,16 +262,70 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                                       const SizedBox(height: 16),
 
-                                      // You can keep the next two panels (static) or later scope them as well
-                                      const _RowWithReport(
-                                        left: _TrendsChartCard(),
-                                        right: _ReportCard(),
+                                      // Row 2: New vs Transferred (stacked) — full width
+                                      _NewVsTransferredStackedCard(
+                                        mohArea: mohArea,
                                       ),
+
                                       const SizedBox(height: 16),
-                                      const _RowWithReport(
-                                        left: _GrowthChartCard(),
-                                        right: _ReportCard(),
+
+                                      // Row 3: Age pyramid — full width
+                                      _AgePyramidCard(mohArea: mohArea),
+
+                                      const SizedBox(height: 16),
+
+                                      // Row 4: Complaints → Cases conversion (bubble grid) + Report
+                                      _RowWithReport(
+                                        left:
+                                            _ComplaintsConversionBubbleGridCard(
+                                              mohArea: mohArea,
+                                            ),
+                                        right: const _ReportCard(),
                                       ),
+
+                                      const SizedBox(height: 16),
+
+                                      // ===== New Bottom Sections =====
+                                      // Public Health Risk Indicators
+                                      _SectionHeader(
+                                        "Public Health Risk Indicators",
+                                      ),
+                                      const SizedBox(height: 12),
+
+                                      // High-Risk Zones (full width)
+                                      _HighRiskZonesCard(),
+                                      const SizedBox(height: 16),
+
+                                      // Seasonal Trend Tracker (full width, placed under High-Risk Zones)
+                                      _SeasonalTrendTrackerCard(
+                                        mohArea: mohArea,
+                                      ),
+
+                                      const SizedBox(height: 16),
+
+                                      // Data Quality & Ops Tracking
+                                      _SectionHeader(
+                                        "Data Quality & Ops Tracking",
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _AvgReportingLagCard(
+                                              mohArea: mohArea,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: _DuplicateComplaintRatioCard(
+                                              mohArea: mohArea,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 16),
+
                                       const SizedBox(height: 8),
                                     ],
                                   ),
@@ -267,8 +347,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 }
 
-/// Reads the signed-in user's profile to obtain `moh_area`, then builds child.
-/// Shows loading / helpful messages if not signed in or no moh_area set.
 class _BuildWithMoh extends StatelessWidget {
   final Widget Function(BuildContext context, String mohArea) childBuilder;
   const _BuildWithMoh({required this.childBuilder});
@@ -310,8 +388,6 @@ class _BuildWithMoh extends StatelessWidget {
     );
   }
 }
-
-// ======================= Sidebar =======================
 
 class _Sidebar extends StatelessWidget {
   @override
@@ -504,7 +580,6 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-// ===== SIDENAV ITEM =====
 class _SideNavItem extends StatelessWidget {
   const _SideNavItem({
     required this.icon,
@@ -565,8 +640,6 @@ class _SideNavItem extends StatelessWidget {
   }
 }
 
-// ======================= Header =======================
-
 class _Header extends StatelessWidget {
   const _Header();
 
@@ -625,7 +698,6 @@ class _IconChip extends StatelessWidget {
   }
 }
 
-// ---- wrapper to align large left panel + right report card
 class _RowWithReport extends StatelessWidget {
   final Widget left;
   final Widget right;
@@ -644,8 +716,30 @@ class _RowWithReport extends StatelessWidget {
   }
 }
 
-// ======================= UPDATED BAR CHART (MOH-scoped) =======================
+class _SectionHeader extends StatelessWidget {
+  final String text;
+  const _SectionHeader(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          text,
+          style: const TextStyle(
+            color: AnalyticsPage.text,
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            letterSpacing: .2,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Container(height: 1, color: AnalyticsPage.border)),
+      ],
+    );
+  }
+}
 
+// ================== UNCHANGED: Yearly Cases Card ==================
 class _YearlyCasesBarCard extends StatelessWidget {
   final String mohArea;
   const _YearlyCasesBarCard({required this.mohArea});
@@ -660,15 +754,11 @@ class _YearlyCasesBarCard extends StatelessWidget {
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', isEqualTo: mohArea) // change if needed
+              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, snap) {
-            // Build counts per year
             final now = DateTime.now();
-            final years = List<int>.generate(
-              6,
-              (i) => now.year - 5 + i,
-            ); // last 6 years
+            final years = List<int>.generate(6, (i) => now.year - 5 + i);
             final counts = {for (final y in years) y: 0};
 
             if (snap.hasData) {
@@ -697,7 +787,7 @@ class _YearlyCasesBarCard extends StatelessWidget {
                       width: 18,
                       borderRadius: BorderRadius.circular(4),
                       color: AnalyticsPage.purple,
-                      rodStackItems: [],
+                      rodStackItems: const [],
                     ),
                   ],
                 ),
@@ -742,12 +832,14 @@ class _YearlyCasesBarCard extends StatelessWidget {
                       showTitles: true,
                       getTitlesWidget: (v, meta) {
                         final idx = v.toInt();
-                        if (idx < 0 || idx >= years.length)
+                        final yearsList = years;
+                        if (idx < 0 || idx >= yearsList.length) {
                           return const SizedBox.shrink();
+                        }
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
-                            years[idx].toString(),
+                            yearsList[idx].toString(),
                             style: const TextStyle(
                               color: AnalyticsPage.subtext,
                               fontSize: 11,
@@ -771,197 +863,905 @@ class _YearlyCasesBarCard extends StatelessWidget {
   }
 }
 
-// ======================= Other Panels (keep / tweak later) =======================
+// ================== New vs Transferred (stacked monthly) ==================
+class _NewVsTransferredStackedCard extends StatelessWidget {
+  final String mohArea;
+  const _NewVsTransferredStackedCard({required this.mohArea});
 
-class _TrendsChartCard extends StatelessWidget {
-  const _TrendsChartCard();
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
 
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: "Trends",
-      tabHint: "Case Trends",
+      title: "New vs Transferred (last 12 months)",
+      tabHint: "Stacked columns",
       child: SizedBox(
-        height: 260,
-        child: LineChart(
-          LineChartData(
-            minX: 0,
-            maxX: 11,
-            minY: 0,
-            maxY: 40,
-            gridData: FlGridData(
-              drawVerticalLine: false,
-              getDrawingHorizontalLine: (value) =>
-                  FlLine(color: AnalyticsPage.border, strokeWidth: 1),
-            ),
-            titlesData: FlTitlesData(
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 36,
-                  getTitlesWidget: (v, m) {
-                    if (v % 10 != 0) return const SizedBox.shrink();
-                    return Text(
-                      "${v.toInt()}k",
-                      style: const TextStyle(
-                        color: AnalyticsPage.subtext,
-                        fontSize: 11,
-                      ),
-                    );
-                  },
+        height: 280,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('dengue_cases')
+              .where('patient_moh_area', whereIn: areaKeys(mohArea))
+              .snapshots(),
+          builder: (context, snap) {
+            final now = DateTime.now();
+            final start = DateTime(now.year, now.month - 11, 1); // rolling 12m
+            final newCounts = List<int>.filled(12, 0);
+            final transferCounts = List<int>.filled(12, 0);
+
+            if (snap.hasData) {
+              for (final doc in snap.data!.docs) {
+                final m = doc.data();
+                final ts = m['date_of_admission'];
+                if (ts is! Timestamp) continue;
+                final dt = ts.toDate();
+                if (dt.isBefore(start) ||
+                    dt.isAfter(DateTime(now.year, now.month + 1, 0))) {
+                  continue;
+                }
+                final monthIdx =
+                    (dt.year - start.year) * 12 + (dt.month - start.month);
+                if (monthIdx < 0 || monthIdx > 11) continue;
+
+                final type = (m['type'] ?? '').toString().toLowerCase().trim();
+                if (type == 'transferred' || type == 'transfer') {
+                  transferCounts[monthIdx] += 1;
+                } else {
+                  // default bucket = New
+                  newCounts[monthIdx] += 1;
+                }
+              }
+            }
+
+            final totalPerMonth = List<int>.generate(
+              12,
+              (i) => newCounts[i] + transferCounts[i],
+            );
+            final maxVal = totalPerMonth.isEmpty
+                ? 1
+                : totalPerMonth.reduce((a, b) => a > b ? a : b);
+            final groups = <BarChartGroupData>[];
+            for (var i = 0; i < 12; i++) {
+              final n = newCounts[i].toDouble();
+              final t = transferCounts[i].toDouble();
+              groups.add(
+                BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: n + t,
+                      width: 16,
+                      borderRadius: BorderRadius.circular(4),
+                      rodStackItems: [
+                        BarChartRodStackItem(0, n, const Color(0xFF6EA8FE)),
+                        BarChartRodStackItem(n, n + t, const Color(0xFFFF6B6B)),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  interval: 1,
-                  getTitlesWidget: (v, m) {
-                    const months = [
-                      "Jan",
-                      "Feb",
-                      "Mar",
-                      "Apr",
-                      "May",
-                      "Jun",
-                      "Jul",
-                      "Aug",
-                      "Sep",
-                      "Oct",
-                      "Nov",
-                      "Dec",
-                    ];
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 6.0),
-                      child: Text(
-                        months[v.toInt()],
-                        style: const TextStyle(
-                          color: AnalyticsPage.subtext,
-                          fontSize: 11,
+              );
+            }
+
+            return Column(
+              children: [
+                Expanded(
+                  child: BarChart(
+                    BarChartData(
+                      borderData: FlBorderData(show: false),
+                      gridData: FlGridData(
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (value) =>
+                            FlLine(color: AnalyticsPage.border, strokeWidth: 1),
+                      ),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                            getTitlesWidget: (v, m) => Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Text(
+                                v.toInt().toString(),
+                                style: const TextStyle(
+                                  color: AnalyticsPage.subtext,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (v, m) {
+                              final idx = v.toInt();
+                              if (idx < 0 || idx > 11) {
+                                return const SizedBox.shrink();
+                              }
+                              final dt = DateTime(
+                                now.year,
+                                now.month - 11 + idx,
+                                1,
+                              );
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  _months[dt.month - 1],
+                                  style: const TextStyle(
+                                    color: AnalyticsPage.subtext,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ),
-                    );
-                  },
+                      barGroups: groups,
+                      maxY: (maxVal == 0 ? 1 : (maxVal * 1.2)).toDouble(),
+                      minY: 0,
+                    ),
+                  ),
                 ),
-              ),
-              rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-            ),
-            borderData: FlBorderData(
-              border: const Border(
-                left: BorderSide(color: AnalyticsPage.border),
-                bottom: BorderSide(color: AnalyticsPage.border),
-              ),
-            ),
-            lineBarsData: [
-              LineChartBarData(
-                isCurved: true,
-                barWidth: 3,
-                color: AnalyticsPage.purple,
-                dotData: const FlDotData(show: false),
-                spots: const [
-                  FlSpot(0, 12),
-                  FlSpot(1, 14),
-                  FlSpot(2, 10),
-                  FlSpot(3, 18),
-                  FlSpot(4, 16),
-                  FlSpot(5, 24),
-                  FlSpot(6, 19),
-                  FlSpot(7, 26),
-                  FlSpot(8, 22),
-                  FlSpot(9, 28),
-                  FlSpot(10, 24),
-                  FlSpot(11, 32),
-                ],
-              ),
-              LineChartBarData(
-                isCurved: true,
-                barWidth: 2,
-                color: AnalyticsPage.purpleDim.withOpacity(.5),
-                dashArray: [6, 4],
-                dotData: const FlDotData(show: false),
-                spots: const [
-                  FlSpot(0, 10),
-                  FlSpot(1, 12),
-                  FlSpot(2, 9),
-                  FlSpot(3, 15),
-                  FlSpot(4, 14),
-                  FlSpot(5, 18),
-                  FlSpot(6, 16),
-                  FlSpot(7, 20),
-                  FlSpot(8, 19),
-                  FlSpot(9, 23),
-                  FlSpot(10, 20),
-                  FlSpot(11, 27),
-                ],
-              ),
-            ],
-          ),
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    _LegendDot(color: Color(0xFF6EA8FE), label: 'New'),
+                    SizedBox(width: 14),
+                    _LegendDot(color: Color(0xFFFF6B6B), label: 'Transferred'),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _GrowthChartCard extends StatelessWidget {
-  const _GrowthChartCard();
+// ================== Complaints → Cases conversion (bubble grid, monthly) ==================
+class _ComplaintsConversionBubbleGridCard extends StatelessWidget {
+  final String mohArea;
+  const _ComplaintsConversionBubbleGridCard({required this.mohArea});
+
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
 
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: "Case Growth",
+      title: "Complaints → Cases conversion (last 12 months)",
+      tabHint: "Bubble grid (ratio = cases / complaints)",
       child: SizedBox(
-        height: 260,
-        child: LineChart(
-          LineChartData(
-            minX: 0,
-            maxX: 11,
-            minY: 0,
-            maxY: 40,
-            gridData: FlGridData(
-              drawVerticalLine: false,
-              getDrawingHorizontalLine: (value) =>
-                  FlLine(color: AnalyticsPage.border, strokeWidth: 1),
-            ),
-            titlesData: const FlTitlesData(show: false),
-            borderData: FlBorderData(
-              border: const Border(
-                left: BorderSide(color: AnalyticsPage.border),
-                bottom: BorderSide(color: AnalyticsPage.border),
-              ),
-            ),
-            lineBarsData: [
-              LineChartBarData(
-                isCurved: true,
-                barWidth: 3,
-                color: AnalyticsPage.purple,
-                dotData: const FlDotData(show: false),
-                spots: const [
-                  FlSpot(0, 8),
-                  FlSpot(1, 9),
-                  FlSpot(2, 12),
-                  FlSpot(3, 11),
-                  FlSpot(4, 15),
-                  FlSpot(5, 14),
-                  FlSpot(6, 20),
-                  FlSpot(7, 18),
-                  FlSpot(8, 24),
-                  FlSpot(9, 22),
-                  FlSpot(10, 30),
-                  FlSpot(11, 34),
-                ],
-              ),
-            ],
-          ),
+        height: 280,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('dengue_cases')
+              .where('patient_moh_area', whereIn: areaKeys(mohArea))
+              .snapshots(),
+          builder: (context, casesSnap) {
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('complaints')
+                  .where('moh_area', whereIn: areaKeys(mohArea))
+                  .snapshots(),
+              builder: (context, compSnap) {
+                final now = DateTime.now();
+                final start = DateTime(now.year, now.month - 11, 1);
+                final casesPerMonth = List<int>.filled(12, 0);
+                final compsPerMonth = List<int>.filled(12, 0);
+
+                if (casesSnap.hasData) {
+                  for (final d in casesSnap.data!.docs) {
+                    final ts = d.data()['date_of_admission'];
+                    if (ts is! Timestamp) continue;
+                    final dt = ts.toDate();
+                    final idx =
+                        (dt.year - start.year) * 12 + (dt.month - start.month);
+                    if (idx >= 0 && idx < 12) casesPerMonth[idx] += 1;
+                  }
+                }
+                if (compSnap.hasData) {
+                  for (final d in compSnap.data!.docs) {
+                    final ts = d.data()['timestamp'];
+                    if (ts is! Timestamp) continue;
+                    final dt = ts.toDate();
+                    final idx =
+                        (dt.year - start.year) * 12 + (dt.month - start.month);
+                    if (idx >= 0 && idx < 12) compsPerMonth[idx] += 1;
+                  }
+                }
+
+                final ratios = List<double>.generate(12, (i) {
+                  final c = casesPerMonth[i];
+                  final q = compsPerMonth[i];
+                  if (q == 0) return 0.0;
+                  return c / q;
+                });
+
+                double bubbleSize(double r) {
+                  final clamped = r.clamp(0.0, 3.0);
+                  return 14 + clamped * 9.0;
+                }
+
+                return LayoutBuilder(
+                  builder: (ctx, cons) {
+                    final tileW = (cons.maxWidth - 16 * 3) / 4; // 4 per row
+                    return Wrap(
+                      spacing: 16,
+                      runSpacing: 12,
+                      children: [
+                        for (int i = 0; i < 12; i++)
+                          Container(
+                            width: tileW,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              color: AnalyticsPage.panelAlt,
+                              border: Border.all(color: AnalyticsPage.border),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: bubbleSize(ratios[i]),
+                                  height: bubbleSize(ratios[i]),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AnalyticsPage.purple.withOpacity(
+                                      0.35 + 0.2 * ratios[i].clamp(0.0, 1.0),
+                                    ),
+                                    border: Border.all(
+                                      color: AnalyticsPage.purple,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        _months[DateTime(
+                                              now.year,
+                                              now.month - 11 + i,
+                                              1,
+                                            ).month -
+                                            1],
+                                        style: const TextStyle(
+                                          color: AnalyticsPage.text,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        "Ratio: ${ratios[i].isNaN ? '0.0' : ratios[i].toStringAsFixed(2)}  •  C:${casesPerMonth[i]}  Q:${compsPerMonth[i]}",
+                                        style: const TextStyle(
+                                          color: AnalyticsPage.subtext,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            );
+          },
         ),
       ),
     );
   }
 }
 
+// ================== Age Pyramid (mirrored) ==================
+class _AgePyramidCard extends StatelessWidget {
+  final String mohArea;
+  const _AgePyramidCard({required this.mohArea});
+
+  static const _bands = <String>[
+    '0-9',
+    '10-19',
+    '20-29',
+    '30-39',
+    '40-49',
+    '50-59',
+    '60-69',
+    '70+',
+  ];
+
+  int _ageFromDob(DateTime dob) {
+    final now = DateTime.now();
+    int age = now.year - dob.year;
+    final hadBirthday =
+        (now.month > dob.month) ||
+        (now.month == dob.month && now.day >= dob.day);
+    if (!hadBirthday) age--;
+    return age;
+  }
+
+  int _bandIndex(int age) {
+    if (age <= 9) return 0;
+    if (age <= 19) return 1;
+    if (age <= 29) return 2;
+    if (age <= 39) return 3;
+    if (age <= 49) return 4;
+    if (age <= 59) return 5;
+    if (age <= 69) return 6;
+    return 7;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      title: "Age Pyramid (by gender)",
+      tabHint: "Mirrored bars",
+      child: SizedBox(
+        height: 280,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('dengue_cases')
+              .where('patient_moh_area', whereIn: areaKeys(mohArea))
+              .snapshots(),
+          builder: (context, snap) {
+            final male = List<int>.filled(_bands.length, 0);
+            final female = List<int>.filled(_bands.length, 0);
+
+            if (snap.hasData) {
+              for (final d in snap.data!.docs) {
+                final m = d.data();
+                final dobTs = m['date_of_birth'];
+                if (dobTs is! Timestamp) continue;
+                final g = (m['gender'] ?? '').toString().toLowerCase().trim();
+                final age = _ageFromDob(dobTs.toDate());
+                final idx = _bandIndex(age);
+                if (idx < 0 || idx >= _bands.length) continue;
+                if (g.startsWith('f')) {
+                  female[idx] += 1;
+                } else if (g.startsWith('m')) {
+                  male[idx] += 1;
+                }
+              }
+            }
+
+            final absMax = [
+              ...male.map((e) => e.abs()),
+              ...female.map((e) => e.abs()),
+            ].fold<int>(0, (p, c) => c > p ? c : p);
+            final maxY = (absMax == 0 ? 1 : (absMax * 1.2)).toDouble();
+
+            final groups = <BarChartGroupData>[];
+            for (int i = 0; i < _bands.length; i++) {
+              groups.add(
+                BarChartGroupData(
+                  x: i,
+                  barsSpace: 6,
+                  barRods: [
+                    // male: negative
+                    BarChartRodData(
+                      toY: -male[i].toDouble(),
+                      width: 12,
+                      color: const Color(0xFF6EA8FE),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    // female: positive
+                    BarChartRodData(
+                      toY: female[i].toDouble(),
+                      width: 12,
+                      color: const Color(0xFFFF6B6B),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Column(
+              children: [
+                Expanded(
+                  child: BarChart(
+                    BarChartData(
+                      borderData: FlBorderData(show: false),
+                      gridData: FlGridData(
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (value) =>
+                            FlLine(color: AnalyticsPage.border, strokeWidth: 1),
+                      ),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 44,
+                            getTitlesWidget: (v, m) => Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Text(
+                                v.abs().toInt().toString(),
+                                style: const TextStyle(
+                                  color: AnalyticsPage.subtext,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (v, m) {
+                              final idx = v.toInt();
+                              if (idx < 0 || idx >= _bands.length) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  _bands[idx],
+                                  style: const TextStyle(
+                                    color: AnalyticsPage.subtext,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      barGroups: groups,
+                      minY: -maxY,
+                      maxY: maxY,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    _LegendDot(color: Color(0xFF6EA8FE), label: 'Male'),
+                    SizedBox(width: 14),
+                    _LegendDot(color: Color(0xFFFF6B6B), label: 'Female'),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// ================== Bottom: PUBLIC HEALTH RISK INDICATORS ==================
+// Top 5 MOH areas by new cases in last 14 days (global)
+class _HighRiskZonesCard extends StatelessWidget {
+  const _HighRiskZonesCard();
+
+  String _short(String s) {
+    final t = s.trim();
+    if (t.length <= 10) return t;
+    return t.substring(0, 10) + '…';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 14));
+
+    return _Panel(
+      title: "High-Risk Zones",
+      tabHint: "Top 5 MOH areas • last 14d",
+      child: SizedBox(
+        height: 260,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('dengue_cases')
+              .where(
+                'date_of_admission',
+                isGreaterThanOrEqualTo: Timestamp.fromDate(
+                  DateTime(start.year, start.month, start.day),
+                ),
+              )
+              .snapshots(),
+          builder: (context, snap) {
+            final counts = <String, int>{};
+            if (snap.hasData) {
+              for (final d in snap.data!.docs) {
+                final m = d.data();
+                final ts = m['date_of_admission'];
+                final area = (m['patient_moh_area'] ?? '').toString().trim();
+                if (area.isEmpty || ts is! Timestamp) continue;
+                // only "New" cases
+                final type = (m['type'] ?? '').toString().toLowerCase();
+                if (type.isNotEmpty &&
+                    !(type == 'new' || type == 'case' || type == 'admission')) {
+                  continue;
+                }
+                counts[area] = (counts[area] ?? 0) + 1;
+              }
+            }
+
+            final top = counts.entries.toList()
+              ..sort((a, b) => b.value.compareTo(a.value));
+            final top5 = top.take(5).toList();
+            final maxVal = top5.isEmpty
+                ? 1
+                : top5.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+
+            final groups = <BarChartGroupData>[];
+            for (int i = 0; i < top5.length; i++) {
+              groups.add(
+                BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: top5[i].value.toDouble(),
+                      width: 18,
+                      color: const Color(0xFFFFAA5B),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return BarChart(
+              BarChartData(
+                gridData: FlGridData(
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) =>
+                      FlLine(color: AnalyticsPage.border, strokeWidth: 1),
+                ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      getTitlesWidget: (v, m) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Text(
+                          v.toInt().toString(),
+                          style: const TextStyle(
+                            color: AnalyticsPage.subtext,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (v, m) {
+                        final idx = v.toInt();
+                        if (idx < 0 || idx >= top5.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            _short(top5[idx].key),
+                            style: const TextStyle(
+                              color: AnalyticsPage.subtext,
+                              fontSize: 10,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barGroups: groups,
+                maxY: (maxVal == 0 ? 1 : (maxVal * 1.2)).toDouble(),
+                minY: 0,
+              ),
+              swapAnimationDuration: const Duration(milliseconds: 350),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// This month vs same month last year (MOH-scoped)
+class _SeasonalTrendTrackerCard extends StatelessWidget {
+  final String mohArea;
+  const _SeasonalTrendTrackerCard({required this.mohArea});
+
+  int _daysInMonth(int year, int month) {
+    final first = DateTime(year, month, 1);
+    final next = DateTime(year, month + 1, 1);
+    return next.difference(first).inDays;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final thisYear = now.year;
+    final month = now.month;
+    final lastYear = thisYear - 1;
+    final daysThis = _daysInMonth(thisYear, month);
+    final daysLast = _daysInMonth(lastYear, month);
+    final maxDays = (daysThis > daysLast ? daysThis : daysLast);
+
+    return _Panel(
+      title: "Seasonal Trend Tracker",
+      tabHint: "This month vs last year",
+      child: SizedBox(
+        height: 260,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('dengue_cases')
+              .where('patient_moh_area', whereIn: areaKeys(mohArea))
+              .snapshots(),
+          builder: (context, snap) {
+            final cur = List<int>.filled(maxDays, 0);
+            final prev = List<int>.filled(maxDays, 0);
+
+            if (snap.hasData) {
+              for (final d in snap.data!.docs) {
+                final ts = d.data()['date_of_admission'];
+                if (ts is! Timestamp) continue;
+                final dt = ts.toDate();
+                if (dt.month != month) continue;
+                final di = dt.day - 1;
+                if (dt.year == thisYear && di >= 0 && di < maxDays)
+                  cur[di] += 1;
+                if (dt.year == lastYear && di >= 0 && di < maxDays)
+                  prev[di] += 1;
+              }
+            }
+
+            final maxY = [
+              ...cur,
+              ...prev,
+            ].fold<int>(0, (p, c) => c > p ? c : p);
+
+            List<FlSpot> _spots(List<int> a) => [
+              for (int i = 0; i < maxDays; i++)
+                FlSpot((i + 1).toDouble(), a[i].toDouble()),
+            ];
+
+            return LineChart(
+              LineChartData(
+                minX: 1,
+                maxX: maxDays.toDouble(),
+                minY: 0,
+                maxY: (maxY == 0 ? 1 : (maxY * 1.2)).toDouble(),
+                gridData: FlGridData(
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) =>
+                      FlLine(color: AnalyticsPage.border, strokeWidth: 1),
+                ),
+                titlesData: FlTitlesData(
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (v, m) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Text(
+                          v.toInt().toString(),
+                          style: const TextStyle(
+                            color: AnalyticsPage.subtext,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: (maxDays / 6).ceilToDouble(),
+                      getTitlesWidget: (v, m) => Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          v.toInt().toString(),
+                          style: const TextStyle(
+                            color: AnalyticsPage.subtext,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(
+                  border: const Border(
+                    left: BorderSide(color: AnalyticsPage.border),
+                    bottom: BorderSide(color: AnalyticsPage.border),
+                  ),
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    isCurved: true,
+                    barWidth: 3,
+                    color: AnalyticsPage.purple,
+                    dotData: const FlDotData(show: false),
+                    spots: _spots(cur),
+                  ),
+                  LineChartBarData(
+                    isCurved: true,
+                    barWidth: 2,
+                    color: AnalyticsPage.purpleDim.withOpacity(.6),
+                    dashArray: [6, 4],
+                    dotData: const FlDotData(show: false),
+                    spots: _spots(prev),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// ================== Bottom: DATA QUALITY & OPS ==================
+class _AvgReportingLagCard extends StatelessWidget {
+  final String mohArea;
+  const _AvgReportingLagCard({required this.mohArea});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 30));
+
+    return _Panel(
+      title: "Reporting Lag (Days)",
+      tabHint: "Avg • last 30d",
+      child: SizedBox(
+        height: 140,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('dengue_cases')
+              .where('patient_moh_area', whereIn: areaKeys(mohArea))
+              .snapshots(),
+          builder: (context, snap) {
+            double sum = 0;
+            int n = 0;
+            if (snap.hasData) {
+              for (final d in snap.data!.docs) {
+                final m = d.data();
+                final doa = m['date_of_admission'];
+                final created = m['created_at'];
+                if (doa is! Timestamp || created is! Timestamp) continue;
+                final dt = doa.toDate();
+                if (dt.isBefore(start)) continue;
+                var lag = created.toDate().difference(dt).inDays.toDouble();
+                if (lag < 0) lag = 0; // clamp negatives
+                sum += lag;
+                n++;
+              }
+            }
+            final avg = n == 0 ? 0.0 : (sum / n);
+            return _BigNumber(
+              value: "${avg.toStringAsFixed(1)} d",
+              caption: "$n records",
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _DuplicateComplaintRatioCard extends StatelessWidget {
+  final String mohArea;
+  const _DuplicateComplaintRatioCard({required this.mohArea});
+
+  bool _isDup(String s) {
+    final t = s.toLowerCase();
+    return t.contains('duplicate') || t.contains('dup') || t.contains('dupe');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 30));
+
+    return _Panel(
+      title: "Duplicate Complaint Ratio",
+      tabHint: "% of complaints • last 30d",
+      child: SizedBox(
+        height: 140,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('complaints')
+              .where('moh_area', whereIn: areaKeys(mohArea))
+              .orderBy('timestamp', descending: true)
+              .snapshots(),
+          builder: (context, snap) {
+            int total = 0;
+            int dups = 0;
+            if (snap.hasData) {
+              for (final d in snap.data!.docs) {
+                final m = d.data();
+                final ts = m['timestamp'];
+                if (ts is! Timestamp) continue;
+                final dt = ts.toDate();
+                if (dt.isBefore(start)) break; // list is ordered desc
+                total++;
+                final status = (m['status'] ?? '').toString();
+                if (_isDup(status)) dups++;
+              }
+            }
+            final pct = total == 0 ? 0.0 : (dups / total) * 100.0;
+            return _BigNumber(
+              value: "${pct.toStringAsFixed(1)}%",
+              caption: "$dups / $total flagged",
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// =============== shared panel bits ===============
 class _ReportCard extends StatelessWidget {
   const _ReportCard();
 
@@ -1072,8 +1872,6 @@ class _Panel extends StatelessWidget {
   }
 }
 
-// ======================= KPI Card =======================
-
 class KpiCardBig extends StatelessWidget {
   final String title;
   final String value;
@@ -1122,11 +1920,14 @@ class KpiCardBig extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                hint,
-                style: const TextStyle(
-                  color: AnalyticsPage.subtext,
-                  fontSize: 11,
+              Flexible(
+                child: Text(
+                  hint,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AnalyticsPage.subtext,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -1186,6 +1987,63 @@ class _MiniAreaChart extends StatelessWidget {
         ],
       ),
       duration: const Duration(milliseconds: 350),
+    );
+  }
+}
+
+class _BigNumber extends StatelessWidget {
+  final String value;
+  final String caption;
+  const _BigNumber({required this.value, required this.caption});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: AnalyticsPage.text,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            caption,
+            style: const TextStyle(color: AnalyticsPage.subtext, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============== tiny legend helper ===============
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(color: AnalyticsPage.subtext, fontSize: 12),
+        ),
+      ],
     );
   }
 }

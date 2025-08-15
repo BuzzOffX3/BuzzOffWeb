@@ -1,9 +1,10 @@
-import 'dart:async'; // for StreamSubscription
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-import 'package:dropdown_search/dropdown_search.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'PatientManagement.dart';
 import '../signin.dart';
@@ -15,17 +16,17 @@ class PatientFormPage extends StatefulWidget {
   State<PatientFormPage> createState() => _PatientFormPageState();
 }
 
-// ======= THEME (midnight blue + teal) =======
-const _bg = Color(0xFF0C0F1A);
-const _sidebar = Color(0xFF121826);
-const _panel = Color(0xFF0F1522);
-const _panelAlt = Color(0xFF10182A);
+// ===== THEME: charcoal + cyan =====
+const _bg = Color(0xFF0A0F16);
+const _sidebar = Color(0xFF121A25);
+const _panel = Color(0xFF0E1521);
+const _panelAlt = Color(0xFF111C2B);
 const _ink = Color(0xFF233049);
-const _primary = Color(0xFF00D3A7); // teal
-const _primaryDim = Color(0xFF00B895);
-const _chipBg = Color(0xFF1A2133);
+const _primary = Color(0xFF22D3EE); // cyan
+const _primaryDim = Color(0xFF0EA5B7);
+const _chipBg = Color(0xFF162234);
 
-// --- aliases used by the sidebar snippet (for readability) ---
+// aliases (used by sidebar items)
 const Color sidebar = _sidebar;
 const Color purple = _primary;
 const Color text = Colors.white;
@@ -35,7 +36,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
   final _formKey = GlobalKey<FormState>();
   final ScrollController _scrollController = ScrollController();
 
-  // 🔐 auth + sidebar profile
   String? _uid;
   String username = 'User';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSub;
@@ -53,6 +53,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
   bool step3Complete = false;
   bool step4Complete = false;
 
+  // controllers
   final fullNameController = TextEditingController();
   final remarksController = TextEditingController();
   final medicineController = TextEditingController();
@@ -67,31 +68,15 @@ class _PatientFormPageState extends State<PatientFormPage> {
   final workAddressController = TextEditingController();
   final weeksPregnantController = TextEditingController();
 
-  final mohAreas = const [
-    "Borella",
-    "Colombo Central",
-    "Colombo North",
-    "Colombo South",
-    "Dehiwala",
-    "Homagama",
-    "Kaduwela",
-    "Kesbewa",
-    "Kolonnawa",
-    "Maharagama",
-    "Moratuwa",
-    "Nugegoda",
-    "Ratmalana",
-    "Thimbirigasyaya",
-  ];
+  // MOH/PHI state
   String? selectedMohArea;
+  String? selectedPhiArea; // optional
 
   @override
   void initState() {
     super.initState();
-
     _uid = FirebaseAuth.instance.currentUser?.uid;
     if (_uid != null) _listenToUserProfile(_uid!);
-
     FirebaseAuth.instance.authStateChanges().listen((user) {
       setState(() => _uid = user?.uid);
       if (user?.uid != null) {
@@ -124,7 +109,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
     super.dispose();
   }
 
-  // ===== Profile helpers =====
   String _pickName(Map<String, dynamic> m) {
     final keys = [
       'display_name',
@@ -135,9 +119,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
     ];
     for (final k in keys) {
       final v = m[k];
-      if (v != null && v.toString().trim().isNotEmpty) {
+      if (v != null && v.toString().trim().isNotEmpty)
         return v.toString().trim();
-      }
     }
     return 'User';
   }
@@ -145,16 +128,11 @@ class _PatientFormPageState extends State<PatientFormPage> {
   Future<void> _listenToUserProfile(String uid) async {
     _profileSub?.cancel();
     final fs = FirebaseFirestore.instance;
-
-    // try users/{uid}, fallback to hospitals/{uid}
     DocumentReference<Map<String, dynamic>> ref = fs
         .collection('users')
         .doc(uid);
     final usersDoc = await ref.get();
-    if (!usersDoc.exists) {
-      ref = fs.collection('hospitals').doc(uid);
-    }
-
+    if (!usersDoc.exists) ref = fs.collection('hospitals').doc(uid);
     _profileSub = ref.snapshots().listen(
       (snap) {
         if (!snap.exists) return;
@@ -172,42 +150,37 @@ class _PatientFormPageState extends State<PatientFormPage> {
     setState(() {
       step1Complete =
           fullNameController.text.trim().isNotEmpty && dateOfBirth != null;
-
       step2Complete =
           step1Complete &&
           type != null &&
           hospitalIdController.text.trim().isNotEmpty &&
           dateOfAdmit != null;
-
       step3Complete =
           step2Complete &&
           phoneController.text.trim().isNotEmpty &&
           emailController.text.trim().isNotEmpty &&
           guardianNameController.text.trim().isNotEmpty &&
           guardianContactController.text.trim().isNotEmpty;
-
       step4Complete =
           step3Complete && gender != null && selectedMohArea != null;
     });
   }
 
-  // ---------- validators ----------
   String? _validateTenDigitPhone(String? val) {
     if (val == null || val.trim().isEmpty) return 'Required';
     final v = val.trim();
-    final onlyDigits = RegExp(r'^\d+$');
-    if (!onlyDigits.hasMatch(v)) return 'Digits only (no symbols)';
+    if (!RegExp(r'^\d+$').hasMatch(v)) return 'Digits only';
     if (v.length != 10) return 'Must be exactly 10 digits';
     return null;
   }
 
   String? _validateEmail(String? val) {
     if (val == null || val.trim().isEmpty) return 'Required';
-    final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    return ok.hasMatch(val.trim()) ? null : 'Invalid email';
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(val.trim())
+        ? null
+        : 'Invalid email';
   }
 
-  // ---------- date pickers with limits ----------
   Future<void> _pickDate(
     BuildContext context,
     ValueChanged<DateTime?> onPicked, {
@@ -225,7 +198,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
       firstDate: firstDate,
       lastDate: lastDate,
       builder: (ctx, child) {
-        // themed date picker
         return Theme(
           data: Theme.of(ctx).copyWith(
             colorScheme: const ColorScheme.dark(
@@ -270,9 +242,9 @@ class _PatientFormPageState extends State<PatientFormPage> {
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: _ink.withOpacity(.35)),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: _primary, width: 2),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: _primary, width: 2),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
           ),
         ),
         child: Text(
@@ -285,7 +257,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
     );
   }
 
-  // ---------- text field builder ----------
   Widget _buildTextField(
     String hint, {
     TextEditingController? controller,
@@ -320,18 +291,17 @@ class _PatientFormPageState extends State<PatientFormPage> {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: _ink.withOpacity(.35)),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _primary, width: 2),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: _primary, width: 2),
+          borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
         counterText: '',
       ),
       validator: (val) {
         if (digitsOnly10) return _validateTenDigitPhone(val);
         if (customValidator != null) return customValidator(val);
-        if (isRequired) {
+        if (isRequired)
           return (val == null || val.trim().isEmpty) ? 'Required' : null;
-        }
         return null;
       },
     );
@@ -399,6 +369,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
     gender = null;
     type = null;
     selectedMohArea = null;
+    selectedPhiArea = null;
     isPregnant = false;
     _updateStepProgress();
     setState(() {});
@@ -410,7 +381,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
       return;
     }
 
-    // confirm
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -436,10 +406,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
         ],
       ),
     );
-
     if (confirm != true) return;
 
-    // auth check
     final authUser = FirebaseAuth.instance.currentUser;
     if (authUser == null) {
       ScaffoldMessenger.of(
@@ -448,7 +416,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
       return;
     }
 
-    // fetch hospital profile (hospital-only)
     String hospitalIdProfile = '';
     String admitHospitalMoh = '';
     try {
@@ -468,29 +435,42 @@ class _PatientFormPageState extends State<PatientFormPage> {
       }
       hospitalIdProfile = (data['hospital_id'] ?? '').toString();
       admitHospitalMoh = (data['moh_area'] ?? '').toString();
-    } catch (e) {
-      debugPrint('⚠️ Could not load hospital profile: $e');
-    }
+    } catch (_) {}
 
     final effectiveHospitalId = hospitalIdProfile.isNotEmpty
         ? hospitalIdProfile
         : hospitalIdController.text.trim();
 
+    final patientMohPretty = (selectedMohArea ?? '').trim();
+    final patientMohLc = patientMohPretty.toLowerCase();
+    final patientPhiPretty = (selectedPhiArea ?? '').trim(); // optional
+    final patientPhiLc = patientPhiPretty.toLowerCase();
+
+    final admitMohPretty = admitHospitalMoh.trim();
+    final admitMohLc = admitMohPretty.toLowerCase();
+
     try {
       await FirebaseFirestore.instance.collection('dengue_cases').add({
-        // ---- scope (who admits & where) ----
         'hospital_uid': authUser.uid,
         'hospital_id': effectiveHospitalId,
-        'admit_hospital_moh': admitHospitalMoh,
-        // ---- patient MOH (selector) ----
-        'patient_moh_area': selectedMohArea,
-        // ---- patient data ----
+
+        // MOH / PHI (both pretty + normalized)
+        'patient_moh_area': patientMohLc,
+        'patient_moh_area_pretty': patientMohPretty,
+        'patient_phi_area': patientPhiLc.isEmpty ? null : patientPhiLc,
+        'patient_phi_area_pretty': patientPhiPretty.isEmpty
+            ? null
+            : patientPhiPretty,
+
+        'admit_hospital_moh': admitMohPretty,
+        'admit_hospital_moh_lc': admitMohLc,
+
         'fullname': fullNameController.text.trim(),
         'address': homeAddressController.text.trim(),
         'ward_no': wardNoController.text.trim(),
         'bed_no': bedNoController.text.trim(),
         'phone_number': phoneController.text.trim(),
-        'type': type, // New / Transferred
+        'type': type,
         'gender': gender,
         'status': 'Active',
 
@@ -515,7 +495,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
             : null,
         'school_or_work': workAddressController.text.trim(),
 
-        // provenance
         'created_at': FieldValue.serverTimestamp(),
         'created_by': authUser.uid,
         'updated_at': FieldValue.serverTimestamp(),
@@ -530,19 +509,16 @@ class _PatientFormPageState extends State<PatientFormPage> {
         MaterialPageRoute(builder: (_) => const PatientManagementPage()),
       );
     } on FirebaseException catch (e) {
-      debugPrint('🔥 Firestore error: ${e.code} — ${e.message}');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Firestore failed: ${e.code}')));
     } catch (e) {
-      debugPrint('❌ Unknown error: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Failed to submit.')));
     }
   }
 
-  // ---------- aligned timeline step ----------
   Widget _timelineStep(
     String step,
     String label,
@@ -603,6 +579,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
                   style: const TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 const SizedBox(height: 2),
+                const SizedBox.shrink(),
                 Text(
                   label,
                   style: const TextStyle(
@@ -618,7 +595,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
     );
   }
 
-  // (old navItemTile left here in case you still use it elsewhere)
   Widget navItemTile({
     required IconData icon,
     required String label,
@@ -706,8 +682,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
               firstDate: DateTime(1900),
               lastDate: DateTime.now(),
             ),
-            const SizedBox(height: 20),
 
+            const SizedBox(height: 20),
             const Text(
               "🏥 Admission Info",
               style: TextStyle(
@@ -759,8 +735,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
               firstDate: DateTime(1900),
               lastDate: DateTime.now(),
             ),
-            const SizedBox(height: 20),
 
+            const SizedBox(height: 20),
             const Text(
               "📞 Contact & Guardian",
               style: TextStyle(
@@ -808,8 +784,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
               isRequired: true,
               digitsOnly10: true,
             ),
-            const SizedBox(height: 20),
 
+            const SizedBox(height: 20),
             const Text(
               "🩺 Medical Info",
               style: TextStyle(
@@ -854,61 +830,21 @@ class _PatientFormPageState extends State<PatientFormPage> {
                   ],
                 ),
             ],
+
             const SizedBox(height: 10),
 
-            // Patient's MOH area (selector)
-            DropdownSearch<String>(
-              items: mohAreas,
-              selectedItem: selectedMohArea,
-              onChanged: (val) {
-                setState(() => selectedMohArea = val);
+            // ===== MOH → PHI (dependent) =====
+            MohPhiPickerInline(
+              initialMoh: selectedMohArea,
+              initialPhi: selectedPhiArea,
+              onChanged: (moh, phi) {
+                setState(() {
+                  selectedMohArea = moh;
+                  selectedPhiArea = phi;
+                });
                 _updateStepProgress();
               },
-              dropdownDecoratorProps: DropDownDecoratorProps(
-                dropdownSearchDecoration: InputDecoration(
-                  hintText: "Patient's MOH Area",
-                  hintStyle: const TextStyle(color: Colors.white60),
-                  filled: true,
-                  fillColor: _panelAlt,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: _ink.withOpacity(.35)),
-                  ),
-                  focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: _primary, width: 2),
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                  ),
-                ),
-              ),
-              popupProps: PopupProps.menu(
-                showSearchBox: true,
-                searchFieldProps: TextFieldProps(
-                  decoration: InputDecoration(
-                    hintText: "Search MOH Area...",
-                    hintStyle: const TextStyle(color: Colors.white70),
-                    filled: true,
-                    fillColor: _panelAlt,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: _ink.withOpacity(.35)),
-                    ),
-                    focusedBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: _primary, width: 2),
-                      borderRadius: BorderRadius.all(Radius.circular(10)),
-                    ),
-                  ),
-                  style: const TextStyle(color: Colors.white),
-                ),
-                menuProps: const MenuProps(backgroundColor: _panel),
-              ),
-              validator: (val) => val == null ? 'Required' : null,
-              dropdownButtonProps: const DropdownButtonProps(
-                icon: Icon(Icons.arrow_drop_down, color: Colors.white),
-              ),
-              dropdownBuilder: (context, selectedItem) => Text(
-                selectedItem ?? '',
-                style: const TextStyle(color: Colors.white),
-              ),
+              // phiRequired: true, // uncomment if PHI should be mandatory
             ),
 
             const SizedBox(height: 10),
@@ -923,8 +859,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
               controller: medicineController,
               maxLines: 3,
             ),
-            const SizedBox(height: 20),
 
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -968,7 +904,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
     );
   }
 
-  // due date with future-friendly range
   Widget _childDateDue() {
     return _buildDateField(
       "Due Date",
@@ -986,7 +921,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
       body: SafeArea(
         child: Row(
           children: [
-            // ===== SIDEBAR (fixed) =====
             Container(
               width: 250,
               color: sidebar,
@@ -1026,7 +960,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Active page
                   const _SideNavItem(
                     icon: Icons.dashboard_outlined,
                     label: 'Patient Form',
@@ -1143,8 +1076,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
                 ],
               ),
             ),
-
-            // ===== Main content (wider, themed) =====
             Expanded(
               child: Center(
                 child: Container(
@@ -1171,7 +1102,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
                           padding: const EdgeInsets.all(40),
                           decoration: const BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [Color(0xFF0E1C2E), Color(0xFF09253A)],
+                              colors: [Color(0xFF0D1B2A), Color(0xFF0B2539)],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                             ),
@@ -1237,7 +1168,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
   }
 }
 
-// ===== REUSABLE SIDENAV ITEM =====
 class _SideNavItem extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1287,6 +1217,202 @@ class _SideNavItem extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// =================== MOH → PHI picker (inline, visible text) ===================
+/// Expects Firestore doc at: ref/moh_phi
+/// Example:
+/// { "Kolonnawa": ["Orugodawatta","Salamulla"], "Kaduwela": ["Athurugiriya","Bomiriya"] }
+class MohPhiPickerInline extends StatefulWidget {
+  final String? initialMoh;
+  final String? initialPhi;
+  final void Function(String? moh, String? phi) onChanged;
+  final bool phiRequired;
+
+  const MohPhiPickerInline({
+    super.key,
+    this.initialMoh,
+    this.initialPhi,
+    required this.onChanged,
+    this.phiRequired = false,
+  });
+
+  @override
+  State<MohPhiPickerInline> createState() => _MohPhiPickerInlineState();
+}
+
+class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
+  final _mohKey = GlobalKey<FormFieldState<String>>();
+  final _phiKey = GlobalKey<FormFieldState<String>>();
+  bool _loading = true;
+
+  Map<String, List<String>> _map = {};
+  List<String> _mohList = [];
+  List<String> _phiList = [];
+  String? _moh;
+  String? _phi;
+
+  String _titleCase(String s) {
+    final t = s.trim().toLowerCase();
+    if (t.isEmpty) return t;
+    return t
+        .split(RegExp(r'\s+'))
+        .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
+        .join(' ');
+  }
+
+  Future<void> _load() async {
+    // Directly load from asset, ignore Firestore
+    final jsonStr = await rootBundle.loadString('images/phi_area.json');
+    final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+    final normalized = <String, List<String>>{};
+    for (final e in data.entries) {
+      final moh = _titleCase(e.key.toString());
+      final items =
+          (e.value as List).map((v) => _titleCase(v.toString())).toList()
+            ..sort();
+      normalized[moh] = items;
+    }
+    final mohs = normalized.keys.toList()..sort();
+
+    setState(() {
+      _map = normalized;
+      _mohList = mohs;
+      _loading = false;
+    });
+
+    // initial selection
+    if (widget.initialMoh != null && widget.initialMoh!.trim().isNotEmpty) {
+      _onMohChanged(
+        _titleCase(widget.initialMoh!),
+        initialPhi: widget.initialPhi == null
+            ? null
+            : _titleCase(widget.initialPhi!),
+      );
+    }
+  }
+
+  void _emit() => widget.onChanged(_moh, _phi);
+
+  void _onMohChanged(String? moh, {String? initialPhi}) {
+    setState(() {
+      _moh = moh;
+      _phiList = moh == null ? [] : (_map[moh] ?? const <String>[]);
+      _phi = (initialPhi != null && _phiList.contains(initialPhi))
+          ? initialPhi
+          : null;
+    });
+    _emit();
+    _mohKey.currentState?.validate();
+    _phiKey.currentState?.validate();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 10),
+        child: LinearProgressIndicator(),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          key: _mohKey,
+          value: _moh,
+          dropdownColor: _panelAlt,
+          items: _mohList
+              .map(
+                (m) => DropdownMenuItem(
+                  value: m,
+                  child: Text(
+                    m,
+                    style: const TextStyle(color: Colors.white),
+                  ), // visible text
+                ),
+              )
+              .toList(),
+          onChanged: (v) => _onMohChanged(v),
+          decoration: InputDecoration(
+            labelText: 'Patient MOH Area *',
+            labelStyle: const TextStyle(color: Colors.white70),
+            prefixIcon: const Icon(Icons.location_on, color: Colors.white54),
+            filled: true,
+            fillColor: _panelAlt,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: _ink.withOpacity(.35)),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderSide: BorderSide(color: _primary, width: 2),
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+            ),
+          ),
+          validator: (v) => (v == null || v.isEmpty) ? 'Select MOH area' : null,
+        ),
+        const SizedBox(height: 10),
+        AbsorbPointer(
+          absorbing: _phiList.isEmpty,
+          child: DropdownButtonFormField<String>(
+            key: _phiKey,
+            value: _phiList.contains(_phi) ? _phi : null,
+            dropdownColor: _panelAlt,
+            items: _phiList
+                .map(
+                  (p) => DropdownMenuItem(
+                    value: p,
+                    child: Text(
+                      p,
+                      style: const TextStyle(color: Colors.white),
+                    ), // visible text
+                  ),
+                )
+                .toList(),
+            onChanged: (v) {
+              setState(() => _phi = v);
+              _emit();
+            },
+            decoration: InputDecoration(
+              labelText: widget.phiRequired
+                  ? 'PHI Area *'
+                  : 'PHI Area (optional)',
+              labelStyle: const TextStyle(color: Colors.white70),
+              helperText: _phiList.isEmpty
+                  ? 'Select MOH first'
+                  : 'Filtered by selected MOH',
+              helperStyle: const TextStyle(color: Colors.white38),
+              prefixIcon: const Icon(Icons.badge, color: Colors.white54),
+              filled: true,
+              fillColor: _panelAlt,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: _ink.withOpacity(.35)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: _primary, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+            ),
+            validator: (v) {
+              if (widget.phiRequired) {
+                if (_moh == null || _moh!.isEmpty) return 'Pick MOH first';
+                if (v == null || v.isEmpty) return 'Select PHI area';
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
     );
   }
 }
