@@ -55,8 +55,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
 
   // controllers
   final fullNameController = TextEditingController();
-  final remarksController = TextEditingController();
-  final medicineController = TextEditingController();
+  final remarksController = TextEditingController(); // optional
+  final medicineController = TextEditingController(); // optional
   final emailController = TextEditingController();
   final guardianNameController = TextEditingController();
   final guardianContactController = TextEditingController();
@@ -70,7 +70,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
 
   // MOH/PHI state
   String? selectedMohArea;
-  String? selectedPhiArea; // optional
+  String? selectedPhiArea; // NOW REQUIRED
 
   @override
   void initState() {
@@ -154,15 +154,25 @@ class _PatientFormPageState extends State<PatientFormPage> {
           step1Complete &&
           type != null &&
           hospitalIdController.text.trim().isNotEmpty &&
-          dateOfAdmit != null;
+          dateOfAdmit != null &&
+          wardNoController.text.trim().isNotEmpty &&
+          bedNoController.text.trim().isNotEmpty;
       step3Complete =
           step2Complete &&
           phoneController.text.trim().isNotEmpty &&
           emailController.text.trim().isNotEmpty &&
+          homeAddressController.text.trim().isNotEmpty &&
+          workAddressController.text.trim().isNotEmpty &&
           guardianNameController.text.trim().isNotEmpty &&
           guardianContactController.text.trim().isNotEmpty;
       step4Complete =
-          step3Complete && gender != null && selectedMohArea != null;
+          step3Complete &&
+          gender != null &&
+          selectedMohArea != null &&
+          selectedPhiArea != null &&
+          (!isPregnant ||
+              (weeksPregnantController.text.trim().isNotEmpty &&
+                  dueDate != null));
     });
   }
 
@@ -300,8 +310,9 @@ class _PatientFormPageState extends State<PatientFormPage> {
       validator: (val) {
         if (digitsOnly10) return _validateTenDigitPhone(val);
         if (customValidator != null) return customValidator(val);
-        if (isRequired)
+        if (isRequired) {
           return (val == null || val.trim().isEmpty) ? 'Required' : null;
+        }
         return null;
       },
     );
@@ -375,8 +386,57 @@ class _PatientFormPageState extends State<PatientFormPage> {
     setState(() {});
   }
 
+  bool _validateNonFormRequired() {
+    // Radios, dates, and dependent fields
+    if (dateOfBirth == null) {
+      _showErr('Date of Birth is required');
+      return false;
+    }
+    if (type == null) {
+      _showErr('Admission Type (New/Transferred) is required');
+      return false;
+    }
+    if (dateOfAdmit == null) {
+      _showErr('Date of Admit is required');
+      return false;
+    }
+    if (gender == null) {
+      _showErr('Gender is required');
+      return false;
+    }
+    if (selectedMohArea == null || selectedMohArea!.trim().isEmpty) {
+      _showErr('Patient MOH Area is required');
+      return false;
+    }
+    if (selectedPhiArea == null || selectedPhiArea!.trim().isEmpty) {
+      _showErr('PHI Area is required');
+      return false;
+    }
+    if (isPregnant) {
+      if (weeksPregnantController.text.trim().isEmpty) {
+        _showErr('Weeks Pregnant is required');
+        return false;
+      }
+      if (dueDate == null) {
+        _showErr('Due Date is required when pregnant');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _showErr(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   Future<void> _submitForm() async {
+    // Validate all TextFormFields
     if (!_formKey.currentState!.validate()) {
+      _scrollToFirstInvalidField();
+      return;
+    }
+    // Validate radios/dates/conditional stuff
+    if (!_validateNonFormRequired()) {
       _scrollToFirstInvalidField();
       return;
     }
@@ -443,7 +503,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
 
     final patientMohPretty = (selectedMohArea ?? '').trim();
     final patientMohLc = patientMohPretty.toLowerCase();
-    final patientPhiPretty = (selectedPhiArea ?? '').trim(); // optional
+    final patientPhiPretty = (selectedPhiArea ?? '').trim();
     final patientPhiLc = patientPhiPretty.toLowerCase();
 
     final admitMohPretty = admitHospitalMoh.trim();
@@ -457,10 +517,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
         // MOH / PHI (both pretty + normalized)
         'patient_moh_area': patientMohLc,
         'patient_moh_area_pretty': patientMohPretty,
-        'patient_phi_area': patientPhiLc.isEmpty ? null : patientPhiLc,
-        'patient_phi_area_pretty': patientPhiPretty.isEmpty
-            ? null
-            : patientPhiPretty,
+        'patient_phi_area': patientPhiLc,
+        'patient_phi_area_pretty': patientPhiPretty,
 
         'admit_hospital_moh': admitMohPretty,
         'admit_hospital_moh_lc': admitMohLc,
@@ -474,18 +532,14 @@ class _PatientFormPageState extends State<PatientFormPage> {
         'gender': gender,
         'status': 'Active',
 
-        'date_of_admission': dateOfAdmit != null
-            ? Timestamp.fromDate(dateOfAdmit!)
-            : FieldValue.serverTimestamp(),
-        'date_of_birth': dateOfBirth != null
-            ? Timestamp.fromDate(dateOfBirth!)
-            : null,
+        'date_of_admission': Timestamp.fromDate(dateOfAdmit!),
+        'date_of_birth': Timestamp.fromDate(dateOfBirth!),
 
         'email': emailController.text.trim(),
         'guardian_name': guardianNameController.text.trim(),
         'guardian_contact': guardianContactController.text.trim(),
-        'remarks': remarksController.text.trim(),
-        'medicine': medicineController.text.trim(),
+        'remarks': remarksController.text.trim(), // optional
+        'medicine': medicineController.text.trim(), // optional
         'pregnant': isPregnant,
         'weeks_pregnant': isPregnant
             ? weeksPregnantController.text.trim()
@@ -770,6 +824,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
             _buildTextField(
               "School/Work Address",
               controller: workAddressController,
+              isRequired: true, // NOW REQUIRED
             ),
             const SizedBox(height: 10),
             _buildTextField(
@@ -823,6 +878,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
                       child: _buildTextField(
                         "Weeks Pregnant",
                         controller: weeksPregnantController,
+                        isRequired: true, // required when pregnant
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -844,7 +900,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
                 });
                 _updateStepProgress();
               },
-              // phiRequired: true, // uncomment if PHI should be mandatory
+              phiRequired: true, // NOW REQUIRED
             ),
 
             const SizedBox(height: 10),
@@ -852,12 +908,14 @@ class _PatientFormPageState extends State<PatientFormPage> {
               "Remarks",
               controller: remarksController,
               maxLines: 3,
+              // optional
             ),
             const SizedBox(height: 10),
             _buildTextField(
               "Prescribed Medicine",
               controller: medicineController,
               maxLines: 3,
+              // optional
             ),
 
             const SizedBox(height: 20),
@@ -947,7 +1005,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'MOH ANALYTICS',
+                            'Patient Data',
                             style: TextStyle(
                               color: text,
                               fontWeight: FontWeight.w700,

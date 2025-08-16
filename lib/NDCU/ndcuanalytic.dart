@@ -9,7 +9,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:buzzoffwebnew/MOH/complaints.dart';
+import 'ndcucomplaints.dart';
 import 'package:buzzoffwebnew/MOH/MapPage.dart';
 import 'package:buzzoffwebnew/signin.dart';
 
@@ -30,7 +30,7 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-/* ---------------- helpers for MOH key variants (match any case) ---------------- */
+/* ---------- helpers ---------- */
 String _titleCase(String s) {
   final t = s.trim().toLowerCase();
   if (t.isEmpty) return t;
@@ -38,11 +38,6 @@ String _titleCase(String s) {
       .split(RegExp(r'\s+'))
       .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
       .join(' ');
-}
-
-List<String> areaKeys(String raw) {
-  final t = raw.trim();
-  return {t, t.toLowerCase(), _titleCase(t), t.toUpperCase()}.toList();
 }
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
@@ -62,20 +57,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return buckets;
   }
 
-  /* ---------------- MOH-scoped streams (no orderBy needed for KPIs) ---------------- */
-  Stream<QuerySnapshot<Map<String, dynamic>>> _casesStreamForMoh(String moh) {
-    return FirebaseFirestore.instance
-        .collection('dengue_cases')
-        .where('patient_moh_area', whereIn: areaKeys(moh))
-        .snapshots();
+  /* ---------- national streams (no scoping) ---------- */
+  Stream<QuerySnapshot<Map<String, dynamic>>> _casesStreamAll() {
+    return FirebaseFirestore.instance.collection('dengue_cases').snapshots();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _complaintsStreamForMoh(
-    String moh,
-  ) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> _complaintsStreamAll() {
     return FirebaseFirestore.instance
         .collection('complaints')
-        .where('moh_area', whereIn: areaKeys(moh))
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
@@ -96,260 +85,218 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     padding: const EdgeInsets.all(16.0),
                     child: DefaultTextStyle(
                       style: const TextStyle(color: AnalyticsPage.text),
-                      child: _BuildWithMoh(
-                        childBuilder: (context, mohArea) {
-                          final casesStream = _casesStreamForMoh(mohArea);
-                          final complaintsStream = _complaintsStreamForMoh(
-                            mohArea,
-                          );
+                      child: Column(
+                        children: [
+                          const _Header(),
+                          const SizedBox(height: 20),
 
-                          return Column(
-                            children: [
-                              const _Header(),
-                              const SizedBox(height: 20),
+                          // ======= KPIs (NDCU-wide) =======
+                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: _casesStreamAll(),
+                            builder: (context, casesSnap) {
+                              int totalCases = 0; // THIS YEAR
+                              int activeCases = 0; // THIS YEAR
+                              final admissions = <Timestamp>[];
 
-                              // ======= KPIs (YEAR-SCOPED) =======
-                              StreamBuilder<
-                                QuerySnapshot<Map<String, dynamic>>
-                              >(
-                                stream: casesStream,
-                                builder: (context, casesSnap) {
-                                  int totalCases = 0; // CURRENT YEAR
-                                  int activeCases = 0; // CURRENT YEAR
-                                  final admissions = <Timestamp>[]; // YEAR
+                              final now = DateTime.now();
+                              final startThisMonth = DateTime(
+                                now.year,
+                                now.month,
+                                1,
+                              );
+                              final startNextMonth = DateTime(
+                                now.year,
+                                now.month + 1,
+                                1,
+                              );
+                              final startPrevMonth = DateTime(
+                                now.year,
+                                now.month - 1,
+                                1,
+                              );
 
-                                  final now = DateTime.now();
-                                  final startThisMonth = DateTime(
-                                    now.year,
-                                    now.month,
-                                    1,
-                                  );
-                                  final startNextMonth = DateTime(
-                                    now.year,
-                                    now.month + 1,
-                                    1,
-                                  );
-                                  final startPrevMonth = DateTime(
-                                    now.year,
-                                    now.month - 1,
-                                    1,
-                                  );
+                              int thisMonthCount = 0;
+                              int prevMonthCount = 0;
 
-                                  int thisMonthCount = 0; // YEAR
-                                  int prevMonthCount = 0; // YEAR
+                              if (casesSnap.hasData) {
+                                for (final d in casesSnap.data!.docs) {
+                                  final m = d.data();
+                                  final ts = m['date_of_admission'];
+                                  if (ts is! Timestamp) continue;
+                                  final dt = ts.toDate();
 
-                                  if (casesSnap.hasData) {
-                                    for (final d in casesSnap.data!.docs) {
-                                      final m = d.data();
-
-                                      final ts = m['date_of_admission'];
-                                      if (ts is! Timestamp) continue;
-                                      final dt = ts.toDate();
-
-                                      // 🔒 Only count current year for KPIs
-                                      if (dt.year != now.year) continue;
-
-                                      totalCases++;
-
-                                      final status = (m['status'] ?? '')
-                                          .toString()
-                                          .toLowerCase()
-                                          .trim();
-                                      if (status == 'active') activeCases++;
-
-                                      admissions.add(ts);
-
-                                      if (!dt.isBefore(startThisMonth) &&
-                                          dt.isBefore(startNextMonth)) {
-                                        thisMonthCount++;
-                                      } else if (!dt.isBefore(startPrevMonth) &&
-                                          dt.isBefore(startThisMonth)) {
-                                        prevMonthCount++;
-                                      }
-                                    }
+                                  // ===== YEAR FILTER for KPIs =====
+                                  if (dt.year == now.year) {
+                                    totalCases++;
+                                    final status = (m['status'] ?? '')
+                                        .toString()
+                                        .toLowerCase()
+                                        .trim();
+                                    if (status == 'active') activeCases++;
+                                    admissions.add(ts);
                                   }
 
-                                  final seriesCases = _bucketPerDay(admissions);
-                                  final growthPct = prevMonthCount == 0
-                                      ? (thisMonthCount > 0 ? 100.0 : 0.0)
-                                      : ((thisMonthCount - prevMonthCount) /
-                                                prevMonthCount) *
-                                            100.0;
+                                  // MoM growth (keep across all)
+                                  if (!dt.isBefore(startThisMonth) &&
+                                      dt.isBefore(startNextMonth)) {
+                                    thisMonthCount++;
+                                  } else if (!dt.isBefore(startPrevMonth) &&
+                                      dt.isBefore(startThisMonth)) {
+                                    prevMonthCount++;
+                                  }
+                                }
+                              }
 
-                                  return StreamBuilder<
-                                    QuerySnapshot<Map<String, dynamic>>
-                                  >(
-                                    stream: complaintsStream,
-                                    builder: (context, compSnap) {
-                                      int totalComplaints = 0; // YEAR
-                                      final compTimes = <Timestamp>[]; // YEAR
-                                      if (compSnap.hasData) {
-                                        for (final d in compSnap.data!.docs) {
-                                          final ts = d.data()['timestamp'];
-                                          if (ts is! Timestamp) continue;
-                                          final dt = ts.toDate();
+                              final seriesCases = _bucketPerDay(admissions);
+                              final growthPct = prevMonthCount == 0
+                                  ? (thisMonthCount > 0 ? 100.0 : 0.0)
+                                  : ((thisMonthCount - prevMonthCount) /
+                                            prevMonthCount) *
+                                        100.0;
 
-                                          // 🔒 Only current year for KPI
-                                          if (dt.year != now.year) continue;
+                              return StreamBuilder<
+                                QuerySnapshot<Map<String, dynamic>>
+                              >(
+                                stream: _complaintsStreamAll(),
+                                builder: (context, compSnap) {
+                                  int totalComplaints = 0;
+                                  final compTimes = <Timestamp>[];
+                                  if (compSnap.hasData) {
+                                    totalComplaints =
+                                        compSnap.data!.docs.length;
+                                    for (final d in compSnap.data!.docs) {
+                                      final ts = d.data()['timestamp'];
+                                      if (ts is Timestamp) compTimes.add(ts);
+                                    }
+                                  }
+                                  final seriesComplaints = _bucketPerDay(
+                                    compTimes,
+                                  );
 
-                                          totalComplaints++;
-                                          compTimes.add(ts);
-                                        }
-                                      }
-                                      final seriesComplaints = _bucketPerDay(
-                                        compTimes,
-                                      );
-
-                                      return Row(
-                                        children: [
-                                          Expanded(
-                                            child: KpiCardBig(
-                                              title: 'Total Cases (MOH)',
-                                              value: '$totalCases',
-                                              hint: _titleCase(mohArea),
-                                              series: seriesCases,
-                                              color: AnalyticsPage.purple,
-                                              height: 160,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: KpiCardBig(
-                                              title: 'Case Growth (MoM)',
-                                              value:
-                                                  '${growthPct.isNaN ? 0 : growthPct.toStringAsFixed(1)}%',
-                                              hint:
-                                                  'This month vs last • ${_titleCase(mohArea)}',
-                                              series: seriesCases,
-                                              color: const Color(0xFF6EA8FE),
-                                              height: 160,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: KpiCardBig(
-                                              title: 'Total Complaints',
-                                              value: '$totalComplaints',
-                                              hint:
-                                                  'Current year • ${DateTime.now().year}',
-                                              series: seriesComplaints,
-                                              color: const Color(0xFF5FD7C5),
-                                              height: 160,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: KpiCardBig(
-                                              title: 'Active Dengue Cases',
-                                              value: '$activeCases',
-                                              hint:
-                                                  'status = Active • current year',
-                                              series: seriesCases,
-                                              color: const Color(0xFFFF6B6B),
-                                              height: 160,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
+                                  return Row(
+                                    children: [
+                                      Expanded(
+                                        child: KpiCardBig(
+                                          title: 'Total Cases (This Year)',
+                                          value: '$totalCases',
+                                          hint:
+                                              'All MOH Areas • ${DateTime.now().year}',
+                                          series: seriesCases,
+                                          color: AnalyticsPage.purple,
+                                          height: 160,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: KpiCardBig(
+                                          title: 'Case Growth (MoM)',
+                                          value:
+                                              '${growthPct.isNaN ? 0 : growthPct.toStringAsFixed(1)}%',
+                                          hint:
+                                              'This month vs last • All MOH Areas',
+                                          series: seriesCases,
+                                          color: const Color(0xFF6EA8FE),
+                                          height: 160,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: KpiCardBig(
+                                          title: 'Total Complaints',
+                                          value: '$totalComplaints',
+                                          hint:
+                                              'Last 30d series • All MOH Areas',
+                                          series: seriesComplaints,
+                                          color: const Color(0xFF5FD7C5),
+                                          height: 160,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: KpiCardBig(
+                                          title:
+                                              'Active Dengue Cases (This Year)',
+                                          value: '$activeCases',
+                                          hint:
+                                              'status = Active • ${DateTime.now().year}',
+                                          series: seriesCases,
+                                          color: const Color(0xFFFF6B6B),
+                                          height: 160,
+                                        ),
+                                      ),
+                                    ],
                                   );
                                 },
-                              ),
+                              );
+                            },
+                          ),
 
-                              const SizedBox(height: 20),
+                          const SizedBox(height: 20),
 
-                              // ======= BODY =======
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    children: [
-                                      const SizedBox(height: 16),
+                          // ======= BODY =======
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 16),
 
-                                      // Row 1: Yearly chart + Cases Report (separate)
-                                      _RowWithReport(
-                                        left: _YearlyCasesBarCard(
-                                          mohArea: mohArea,
-                                        ),
-                                        right: _CasesReportCard(
-                                          mohArea: mohArea,
-                                        ),
+                                  // Row 1: Yearly chart + Cases Report (download)
+                                  _RowWithReport(
+                                    left: const _YearlyCasesBarCard(),
+                                    right: const _CasesReportCard(),
+                                  ),
+
+                                  const SizedBox(height: 16),
+
+                                  const _NewVsTransferredStackedCard(),
+
+                                  const SizedBox(height: 16),
+
+                                  const _AgePyramidCard(),
+
+                                  const SizedBox(height: 16),
+
+                                  // Row 4: Complaints → Cases + Complaints Report (download)
+                                  _RowWithReport(
+                                    left:
+                                        const _ComplaintsConversionBubbleGridCard(),
+                                    right: const _ComplaintsReportCard(),
+                                  ),
+
+                                  const SizedBox(height: 16),
+
+                                  const _SectionHeader(
+                                    "Public Health Risk Indicators",
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  const _HighRiskZonesCard(),
+                                  const SizedBox(height: 16),
+
+                                  const _SeasonalTrendTrackerCard(),
+                                  const SizedBox(height: 16),
+
+                                  const _SectionHeader(
+                                    "Data Quality & Ops Tracking",
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: const [
+                                      Expanded(child: _AvgReportingLagCard()),
+                                      SizedBox(width: 16),
+                                      Expanded(
+                                        child: _DuplicateComplaintRatioCard(),
                                       ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Row 2: New vs Transferred (stacked) — full width
-                                      _NewVsTransferredStackedCard(
-                                        mohArea: mohArea,
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Row 3: Age pyramid — full width
-                                      _AgePyramidCard(mohArea: mohArea),
-
-                                      const SizedBox(height: 16),
-
-                                      // Row 4: Complaints → Cases conversion + Complaints Report (separate)
-                                      _RowWithReport(
-                                        left:
-                                            _ComplaintsConversionBubbleGridCard(
-                                              mohArea: mohArea,
-                                            ),
-                                        right: _ComplaintsReportCard(
-                                          mohArea: mohArea,
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // ===== New Bottom Sections =====
-                                      // Public Health Risk Indicators
-                                      _SectionHeader(
-                                        "Public Health Risk Indicators",
-                                      ),
-                                      const SizedBox(height: 12),
-
-                                      // High-Risk Zones (scoped to this MOH, grouped by PHI)
-                                      _HighRiskZonesCard(mohArea: mohArea),
-                                      const SizedBox(height: 16),
-
-                                      // Seasonal Trend Tracker (MOH-scoped)
-                                      _SeasonalTrendTrackerCard(
-                                        mohArea: mohArea,
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Data Quality & Ops Tracking
-                                      _SectionHeader(
-                                        "Data Quality & Ops Tracking",
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: _AvgReportingLagCard(
-                                              mohArea: mohArea,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: _DuplicateComplaintRatioCard(
-                                              mohArea: mohArea,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-
-                                      const SizedBox(height: 16),
-                                      const SizedBox(height: 8),
                                     ],
                                   ),
-                                ),
+
+                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 8),
+                                ],
                               ),
-                            ],
-                          );
-                        },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -363,44 +310,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 }
 
-class _BuildWithMoh extends StatelessWidget {
-  final Widget Function(BuildContext context, String mohArea) childBuilder;
-  const _BuildWithMoh({required this.childBuilder});
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({required this.role});
+  final String role;
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      return const Center(
-        child: Text(
-          'Please sign in',
-          style: TextStyle(color: AnalyticsPage.text),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A1F4D), // NDCU-ish deep purple
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AnalyticsPage.border.withOpacity(.5)),
+      ),
+      child: Text(
+        role.toUpperCase(),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .2,
         ),
-      );
-    }
-
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final data = snap.data!.data() ?? {};
-        final mohArea = (data['moh_area'] ?? '').toString().trim();
-        if (mohArea.isEmpty) {
-          return const Center(
-            child: Text(
-              'Your account has no MOH area set (users/{uid}.moh_area).',
-              style: TextStyle(color: AnalyticsPage.subtext),
-              textAlign: TextAlign.center,
-            ),
-          );
-        }
-        return childBuilder(context, mohArea);
-      },
+      ),
     );
   }
 }
@@ -435,9 +366,9 @@ class _Sidebar extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'MOH ANALYTICS',
+                    children: const [
+                      Text(
+                        'NDCU ANALYTICS',
                         style: TextStyle(
                           color: AnalyticsPage.text,
                           fontWeight: FontWeight.w700,
@@ -445,29 +376,8 @@ class _Sidebar extends StatelessWidget {
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
-                      // Role + (if available) area chip
-                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: uid == null
-                            ? null
-                            : FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(uid)
-                                  .snapshots(),
-                        builder: (context, snap) {
-                          final area =
-                              ((snap.data?.data()?['moh_area'] ?? '') as String)
-                                  .trim();
-                          return Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              const _RoleChip(role: 'moh'),
-                              if (area.isNotEmpty) _AreaChip(area: area),
-                            ],
-                          );
-                        },
-                      ),
+                      SizedBox(height: 6),
+                      _RoleChip(role: 'ndcu'),
                     ],
                   ),
                 ),
@@ -672,67 +582,6 @@ class _SideNavItem extends StatelessWidget {
   }
 }
 
-/* ==== NEW: tiny chips ==== */
-class _RoleChip extends StatelessWidget {
-  const _RoleChip({required this.role});
-  final String role;
-
-  Color get _bg {
-    switch (role.toLowerCase()) {
-      case 'moh':
-        return const Color(0xFF123B2A); // deep green-ish
-      default:
-        return const Color(0xFF2A2D36);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AnalyticsPage.border.withOpacity(.5)),
-      ),
-      child: Text(
-        role.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          letterSpacing: .2,
-        ),
-      ),
-    );
-  }
-}
-
-class _AreaChip extends StatelessWidget {
-  const _AreaChip({required this.area});
-  final String area;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2430),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AnalyticsPage.border.withOpacity(.5)),
-      ),
-      child: Text(
-        'Area: $area',
-        style: const TextStyle(
-          fontSize: 11,
-          color: AnalyticsPage.subtext,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
 class _Header extends StatelessWidget {
   const _Header();
 
@@ -832,22 +681,20 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-// ================== UNCHANGED: Yearly Cases Card ==================
+/* ================== Yearly Cases Card (NDCU-wide) ================== */
 class _YearlyCasesBarCard extends StatelessWidget {
-  final String mohArea;
-  const _YearlyCasesBarCard({required this.mohArea});
+  const _YearlyCasesBarCard();
 
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: "Yearly Patients (MOH: $mohArea)",
+      title: "Yearly Patients (All MOH Areas)",
       tabHint: "Last 6 years",
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, snap) {
             final now = DateTime.now();
@@ -925,14 +772,13 @@ class _YearlyCasesBarCard extends StatelessWidget {
                       showTitles: true,
                       getTitlesWidget: (v, meta) {
                         final idx = v.toInt();
-                        final yearsList = years;
-                        if (idx < 0 || idx >= yearsList.length) {
+                        if (idx < 0 || idx >= years.length) {
                           return const SizedBox.shrink();
                         }
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
-                            yearsList[idx].toString(),
+                            years[idx].toString(),
                             style: const TextStyle(
                               color: AnalyticsPage.subtext,
                               fontSize: 11,
@@ -956,10 +802,9 @@ class _YearlyCasesBarCard extends StatelessWidget {
   }
 }
 
-// ================== New vs Transferred (stacked monthly) ==================
+/* ================== New vs Transferred (stacked monthly, national) ================== */
 class _NewVsTransferredStackedCard extends StatelessWidget {
-  final String mohArea;
-  const _NewVsTransferredStackedCard({required this.mohArea});
+  const _NewVsTransferredStackedCard();
 
   static const _months = [
     'Jan',
@@ -979,18 +824,17 @@ class _NewVsTransferredStackedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: "New vs Transferred (last 12 months)",
+      title: "New vs Transferred (last 12 months, All MOH Areas)",
       tabHint: "Stacked columns",
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, snap) {
             final now = DateTime.now();
-            final start = DateTime(now.year, now.month - 11, 1); // rolling 12m
+            final start = DateTime(now.year, now.month - 11, 1);
             final newCounts = List<int>.filled(12, 0);
             final transferCounts = List<int>.filled(12, 0);
 
@@ -1012,7 +856,6 @@ class _NewVsTransferredStackedCard extends StatelessWidget {
                 if (type == 'transferred' || type == 'transfer') {
                   transferCounts[monthIdx] += 1;
                 } else {
-                  // default bucket = New
                   newCounts[monthIdx] += 1;
                 }
               }
@@ -1131,10 +974,9 @@ class _NewVsTransferredStackedCard extends StatelessWidget {
   }
 }
 
-// ================== Complaints → Cases conversion (bubble grid, monthly) ==================
+/* ================== Complaints → Cases conversion (national) ================== */
 class _ComplaintsConversionBubbleGridCard extends StatelessWidget {
-  final String mohArea;
-  const _ComplaintsConversionBubbleGridCard({required this.mohArea});
+  const _ComplaintsConversionBubbleGridCard();
 
   static const _months = [
     'Jan',
@@ -1154,20 +996,18 @@ class _ComplaintsConversionBubbleGridCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: "Complaints → Cases conversion (last 12 months)",
+      title: "Complaints → Cases conversion (last 12 months, All MOH Areas)",
       tabHint: "Bubble grid (ratio = cases / complaints)",
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, casesSnap) {
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
                   .collection('complaints')
-                  .where('moh_area', whereIn: areaKeys(mohArea))
                   .snapshots(),
               builder: (context, compSnap) {
                 final now = DateTime.now();
@@ -1291,10 +1131,9 @@ class _ComplaintsConversionBubbleGridCard extends StatelessWidget {
   }
 }
 
-// ================== Age Pyramid (mirrored) ==================
+/* ================== Age Pyramid (national, THIS YEAR) ================== */
 class _AgePyramidCard extends StatelessWidget {
-  final String mohArea;
-  const _AgePyramidCard({required this.mohArea});
+  const _AgePyramidCard();
 
   static const _bands = <String>[
     '0-9',
@@ -1330,15 +1169,15 @@ class _AgePyramidCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
     return _Panel(
-      title: "Age Pyramid (by gender)",
+      title: "Age Pyramid (This Year, by gender)",
       tabHint: "Mirrored bars",
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, snap) {
             final male = List<int>.filled(_bands.length, 0);
@@ -1347,8 +1186,15 @@ class _AgePyramidCard extends StatelessWidget {
             if (snap.hasData) {
               for (final d in snap.data!.docs) {
                 final m = d.data();
+
+                final doaTs = m['date_of_admission'];
+                if (doaTs is! Timestamp) continue;
+                final doa = doaTs.toDate();
+                if (doa.year != now.year) continue; // THIS YEAR filter
+
                 final dobTs = m['date_of_birth'];
                 if (dobTs is! Timestamp) continue;
+
                 final g = (m['gender'] ?? '').toString().toLowerCase().trim();
                 final age = _ageFromDob(dobTs.toDate());
                 final idx = _bandIndex(age);
@@ -1374,14 +1220,12 @@ class _AgePyramidCard extends StatelessWidget {
                   x: i,
                   barsSpace: 6,
                   barRods: [
-                    // male: negative
                     BarChartRodData(
                       toY: -male[i].toDouble(),
                       width: 12,
                       color: const Color(0xFF6EA8FE),
                       borderRadius: BorderRadius.circular(3),
                     ),
-                    // female: positive
                     BarChartRodData(
                       toY: female[i].toDouble(),
                       width: 12,
@@ -1472,16 +1316,44 @@ class _AgePyramidCard extends StatelessWidget {
   }
 }
 
-// ================== Bottom: PUBLIC HEALTH RISK INDICATORS ==================
-// Top 5 PHI areas within THIS MOH by new cases in last 14 days
-class _HighRiskZonesCard extends StatelessWidget {
-  final String mohArea;
-  const _HighRiskZonesCard({required this.mohArea});
+/* ================== Public Health Risk Indicators (national Top PHI/MOH) ================== */
+enum _RiskGrouping { phi, moh }
+
+class _HighRiskZonesCard extends StatefulWidget {
+  const _HighRiskZonesCard();
+
+  @override
+  State<_HighRiskZonesCard> createState() => _HighRiskZonesCardState();
+}
+
+class _HighRiskZonesCardState extends State<_HighRiskZonesCard> {
+  _RiskGrouping _mode = _RiskGrouping.phi;
 
   String _short(String s) {
     final t = s.trim();
     if (t.length <= 12) return t;
-    return t.substring(0, 12) + '…';
+    return '${t.substring(0, 12)}…';
+  }
+
+  String _labelForMode(_RiskGrouping m) =>
+      m == _RiskGrouping.phi ? 'PHI' : 'MOH';
+
+  String _normArea(dynamic raw) {
+    final s = (raw ?? '').toString().trim();
+    if (s.isEmpty) return 'Unknown';
+    return s
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .map((w) => w.isEmpty ? w : (w[0].toUpperCase() + w.substring(1)))
+        .join(' ');
+  }
+
+  String _firstNonEmpty(List<dynamic> vals) {
+    for (final v in vals) {
+      final s = (v ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+    return '';
   }
 
   @override
@@ -1490,148 +1362,222 @@ class _HighRiskZonesCard extends StatelessWidget {
     final start = now.subtract(const Duration(days: 14));
 
     return _Panel(
-      title: "High-Risk PHI Zones",
-      tabHint: "Top 5 PHI • ${_titleCase(mohArea)} • last 14d",
-      child: SizedBox(
-        height: 260,
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          // Scope to current MOH only
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
-              .snapshots(),
-          builder: (context, snap) {
-            final countsByPhi = <String, int>{};
+      title: _mode == _RiskGrouping.phi
+          ? "High-Risk PHI Zones"
+          : "High-Risk MOH Areas",
+      tabHint: "Top 5 ${_labelForMode(_mode)} • All MOH Areas • last 14d",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _SegButton(
+                label: 'PHI',
+                active: _mode == _RiskGrouping.phi,
+                onTap: () => setState(() => _mode = _RiskGrouping.phi),
+              ),
+              const SizedBox(width: 8),
+              _SegButton(
+                label: 'MOH',
+                active: _mode == _RiskGrouping.moh,
+                onTap: () => setState(() => _mode = _RiskGrouping.moh),
+              ),
+              const Spacer(),
+            ],
+          ),
+          const SizedBox(height: 12),
 
-            if (snap.hasData) {
-              for (final d in snap.data!.docs) {
-                final m = d.data();
+          SizedBox(
+            height: 260 - 44,
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('dengue_cases')
+                  .snapshots(),
+              builder: (context, snap) {
+                final countsByKey = <String, int>{};
 
-                // date window: last 14 days
-                final doa = m['date_of_admission'];
-                if (doa is! Timestamp) continue;
-                final dt = doa.toDate();
-                final day = DateTime(dt.year, dt.month, dt.day);
-                if (day.isBefore(
-                  DateTime(start.year, start.month, start.day),
-                )) {
-                  continue;
+                if (snap.hasData) {
+                  for (final d in snap.data!.docs) {
+                    final m = d.data();
+
+                    final doa = m['date_of_admission'];
+                    if (doa is! Timestamp) continue;
+                    final dt = doa.toDate();
+                    final day = DateTime(dt.year, dt.month, dt.day);
+                    if (day.isBefore(
+                      DateTime(start.year, start.month, start.day),
+                    ))
+                      continue;
+
+                    final type = (m['type'] ?? '')
+                        .toString()
+                        .toLowerCase()
+                        .trim();
+                    if (type.isNotEmpty &&
+                        !(type == 'new' ||
+                            type == 'case' ||
+                            type == 'admission')) {
+                      continue;
+                    }
+
+                    final key = _mode == _RiskGrouping.phi
+                        ? _normArea(
+                            _firstNonEmpty([
+                              m['patient_phi_area'],
+                              m['phi_area'],
+                            ]),
+                          )
+                        : _normArea(
+                            _firstNonEmpty([
+                              m['patient_moh_area'],
+                              m['moh_area'],
+                              m['admit_hospital_moh'], // crucial fallback
+                            ]),
+                          );
+
+                    if (key != 'Unknown') {
+                      countsByKey[key] = (countsByKey[key] ?? 0) + 1;
+                    }
+                  }
                 }
 
-                // bucket by PHI area (fallback to Unknown)
-                final phiRaw = (m['patient_phi_area'] ?? m['phi_area'] ?? '')
-                    .toString();
-                final phi = phiRaw.trim().isEmpty
-                    ? 'Unknown'
-                    : _titleCase(phiRaw);
+                final top = countsByKey.entries.toList()
+                  ..sort((a, b) => b.value.compareTo(a.value));
+                final top5 = top.take(5).toList();
 
-                // only "new" admissions by convention
-                final type = (m['type'] ?? '').toString().toLowerCase().trim();
-                if (type.isNotEmpty &&
-                    !(type == 'new' || type == 'case' || type == 'admission')) {
-                  continue;
-                }
+                final maxVal = top5.isEmpty
+                    ? 1
+                    : top5.map((e) => e.value).reduce((a, b) => a > b ? a : b);
 
-                countsByPhi[phi] = (countsByPhi[phi] ?? 0) + 1;
-              }
-            }
-
-            // Top 5 PHI within this MOH
-            final top = countsByPhi.entries.toList()
-              ..sort((a, b) => b.value.compareTo(a.value));
-            final top5 = top.take(5).toList();
-
-            final maxVal = top5.isEmpty
-                ? 1
-                : top5.map((e) => e.value).reduce((a, b) => a > b ? a : b);
-
-            final groups = <BarChartGroupData>[];
-            for (int i = 0; i < top5.length; i++) {
-              groups.add(
-                BarChartGroupData(
-                  x: i,
-                  barRods: [
-                    BarChartRodData(
-                      toY: top5[i].value.toDouble(),
-                      width: 18,
-                      color: const Color(0xFFFFAA5B),
-                      borderRadius: BorderRadius.circular(4),
+                final groups = <BarChartGroupData>[];
+                for (int i = 0; i < top5.length; i++) {
+                  groups.add(
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: top5[i].value.toDouble(),
+                          width: 18,
+                          color: const Color(0xFFFFAA5B),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            }
+                  );
+                }
 
-            return BarChart(
-              BarChartData(
-                gridData: FlGridData(
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) =>
-                      FlLine(color: AnalyticsPage.border, strokeWidth: 1),
-                ),
-                borderData: FlBorderData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 36,
-                      getTitlesWidget: (v, m) => Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Text(
-                          v.toInt().toString(),
-                          style: const TextStyle(
-                            color: AnalyticsPage.subtext,
-                            fontSize: 11,
+                return BarChart(
+                  BarChartData(
+                    gridData: FlGridData(
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (value) =>
+                          FlLine(color: AnalyticsPage.border, strokeWidth: 1),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 36,
+                          getTitlesWidget: (v, m) => Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Text(
+                              v.toInt().toString(),
+                              style: const TextStyle(
+                                color: AnalyticsPage.subtext,
+                                fontSize: 11,
+                              ),
+                            ),
                           ),
                         ),
                       ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (v, m) {
+                            final idx = v.toInt();
+                            if (idx < 0 || idx >= top5.length) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                _short(top5[idx].key),
+                                style: const TextStyle(
+                                  color: AnalyticsPage.subtext,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
+                    barGroups: groups,
+                    maxY: (maxVal == 0 ? 1 : (maxVal * 1.2)).toDouble(),
+                    minY: 0,
                   ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (v, m) {
-                        final idx = v.toInt();
-                        if (idx < 0 || idx >= top5.length) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            _short(top5[idx].key),
-                            style: const TextStyle(
-                              color: AnalyticsPage.subtext,
-                              fontSize: 10,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                barGroups: groups,
-                maxY: (maxVal == 0 ? 1 : (maxVal * 1.2)).toDouble(),
-                minY: 0,
-              ),
-              swapAnimationDuration: const Duration(milliseconds: 350),
-            );
-          },
+                  swapAnimationDuration: const Duration(milliseconds: 350),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Small pill-style toggle button
+class _SegButton extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _SegButton({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? AnalyticsPage.purple.withOpacity(.18)
+              : AnalyticsPage.panelAlt,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: active ? AnalyticsPage.purple : AnalyticsPage.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? AnalyticsPage.purple : AnalyticsPage.subtext,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
         ),
       ),
     );
   }
 }
 
-// This month vs same month last year (MOH-scoped)
+/* ================== Seasonal Trend Tracker (national) ================== */
 class _SeasonalTrendTrackerCard extends StatelessWidget {
-  final String mohArea;
-  const _SeasonalTrendTrackerCard({required this.mohArea});
+  const _SeasonalTrendTrackerCard();
 
   int _daysInMonth(int year, int month) {
     final first = DateTime(year, month, 1);
@@ -1650,14 +1596,13 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
     final maxDays = (daysThis > daysLast ? daysThis : daysLast);
 
     return _Panel(
-      title: "Seasonal Trend Tracker",
+      title: "Seasonal Trend Tracker (All MOH Areas)",
       tabHint: "This month vs last year",
       child: SizedBox(
         height: 260,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, snap) {
             final cur = List<int>.filled(maxDays, 0);
@@ -1770,10 +1715,9 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
   }
 }
 
-// ================== Bottom: DATA QUALITY & OPS ==================
+/* ================== Data Quality & Ops (national) ================== */
 class _AvgReportingLagCard extends StatelessWidget {
-  final String mohArea;
-  const _AvgReportingLagCard({required this.mohArea});
+  const _AvgReportingLagCard();
 
   @override
   Widget build(BuildContext context) {
@@ -1782,13 +1726,12 @@ class _AvgReportingLagCard extends StatelessWidget {
 
     return _Panel(
       title: "Reporting Lag (Days)",
-      tabHint: "Avg • last 30d",
+      tabHint: "Avg • last 30d • All MOH Areas",
       child: SizedBox(
         height: 140,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
               .snapshots(),
           builder: (context, snap) {
             double sum = 0;
@@ -1802,7 +1745,7 @@ class _AvgReportingLagCard extends StatelessWidget {
                 final dt = doa.toDate();
                 if (dt.isBefore(start)) continue;
                 var lag = created.toDate().difference(dt).inDays.toDouble();
-                if (lag < 0) lag = 0; // clamp negatives
+                if (lag < 0) lag = 0;
                 sum += lag;
                 n++;
               }
@@ -1820,8 +1763,7 @@ class _AvgReportingLagCard extends StatelessWidget {
 }
 
 class _DuplicateComplaintRatioCard extends StatelessWidget {
-  final String mohArea;
-  const _DuplicateComplaintRatioCard({required this.mohArea});
+  const _DuplicateComplaintRatioCard();
 
   bool _isDup(String s) {
     final t = s.toLowerCase();
@@ -1835,13 +1777,12 @@ class _DuplicateComplaintRatioCard extends StatelessWidget {
 
     return _Panel(
       title: "Duplicate Complaint Ratio",
-      tabHint: "% of complaints • last 30d",
+      tabHint: "% of complaints • last 30d • All MOH Areas",
       child: SizedBox(
         height: 140,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('complaints')
-              .where('moh_area', whereIn: areaKeys(mohArea))
               .orderBy('timestamp', descending: true)
               .snapshots(),
           builder: (context, snap) {
@@ -1853,7 +1794,7 @@ class _DuplicateComplaintRatioCard extends StatelessWidget {
                 final ts = m['timestamp'];
                 if (ts is! Timestamp) continue;
                 final dt = ts.toDate();
-                if (dt.isBefore(start)) break; // list is ordered desc
+                if (dt.isBefore(start)) break;
                 total++;
                 final status = (m['status'] ?? '').toString();
                 if (_isDup(status)) dups++;
@@ -1871,23 +1812,19 @@ class _DuplicateComplaintRatioCard extends StatelessWidget {
   }
 }
 
-// =============== NEW: Cases Report Card (separate download) ===============
+/* =============== NEW: Cases Report Card (download) =============== */
 class _CasesReportCard extends StatelessWidget {
-  const _CasesReportCard({required this.mohArea});
-  final String mohArea;
+  const _CasesReportCard();
 
   Future<void> _exportCasesCsv(BuildContext context) async {
     final now = DateTime.now();
     final year = now.year;
 
-    final q = await FirebaseFirestore.instance
-        .collection('dengue_cases')
-        .where('patient_moh_area', whereIn: areaKeys(mohArea))
-        .get();
+    final q = await FirebaseFirestore.instance.collection('dengue_cases').get();
 
     int totalCases = 0;
     int activeCases = 0;
-    final casesPerMonth = List<int>.filled(12, 0);
+    final perMonth = List<int>.filled(12, 0);
 
     for (final d in q.docs) {
       final m = d.data();
@@ -1897,13 +1834,13 @@ class _CasesReportCard extends StatelessWidget {
       if (dt.year != year) continue;
 
       totalCases++;
-      casesPerMonth[dt.month - 1]++;
+      perMonth[dt.month - 1]++;
 
       final status = (m['status'] ?? '').toString().toLowerCase().trim();
       if (status == 'active') activeCases++;
     }
 
-    final months = const [
+    const months = [
       'Jan',
       'Feb',
       'Mar',
@@ -1917,25 +1854,22 @@ class _CasesReportCard extends StatelessWidget {
       'Nov',
       'Dec',
     ];
-
-    final sb = StringBuffer();
-    sb.writeln('Report,Cases Only');
-    sb.writeln('MOH Area,${_titleCase(mohArea)}');
-    sb.writeln('Year,$year');
-    sb.writeln('Generated At,${DateTime.now().toIso8601String()}');
-    sb.writeln();
-    sb.writeln('KPI,Value,Notes');
-    sb.writeln('Total Cases,$totalCases,Current year only');
-    sb.writeln('Active Dengue Cases,$activeCases,status=Active • current year');
-    sb.writeln();
-    sb.writeln('Month,Cases');
+    final sb = StringBuffer()
+      ..writeln('Report,Cases (National)')
+      ..writeln('Year,$year')
+      ..writeln('Generated At,${DateTime.now().toIso8601String()}')
+      ..writeln()
+      ..writeln('KPI,Value,Notes')
+      ..writeln('Total Cases,$totalCases,Current year only')
+      ..writeln('Active Dengue Cases,$activeCases,status=Active • current year')
+      ..writeln()
+      ..writeln('Month,Cases');
     for (var i = 0; i < 12; i++) {
-      sb.writeln('${months[i]},${casesPerMonth[i]}');
+      sb.writeln('${months[i]},${perMonth[i]}');
     }
 
     final csv = sb.toString();
-    final filename =
-        'cases_report_${_titleCase(mohArea).replaceAll(" ", "_")}_$year.csv';
+    final filename = 'ndcu_cases_$year.csv';
     if (kIsWeb) {
       final bytes = utf8.encode(csv);
       final blob = html.Blob([bytes], 'text/csv');
@@ -1951,7 +1885,7 @@ class _CasesReportCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Web download only; for desktop use FileSaver/path_provider later.',
+            'CSV export works on Web; for mobile/desktop use path_provider or file_saver.',
           ),
         ),
       );
@@ -2006,22 +1940,18 @@ class _CasesReportCard extends StatelessWidget {
   }
 }
 
-// =============== NEW: Complaints Report Card (separate download) ===============
+/* =============== NEW: Complaints Report Card (download) =============== */
 class _ComplaintsReportCard extends StatelessWidget {
-  const _ComplaintsReportCard({required this.mohArea});
-  final String mohArea;
+  const _ComplaintsReportCard();
 
   Future<void> _exportComplaintsCsv(BuildContext context) async {
     final now = DateTime.now();
     final year = now.year;
 
-    final q = await FirebaseFirestore.instance
-        .collection('complaints')
-        .where('moh_area', whereIn: areaKeys(mohArea))
-        .get();
+    final q = await FirebaseFirestore.instance.collection('complaints').get();
 
-    int totalComplaints = 0;
-    final complaintsPerMonth = List<int>.filled(12, 0);
+    int total = 0;
+    final perMonth = List<int>.filled(12, 0);
 
     for (final d in q.docs) {
       final m = d.data();
@@ -2030,11 +1960,11 @@ class _ComplaintsReportCard extends StatelessWidget {
       final dt = ts.toDate();
       if (dt.year != year) continue;
 
-      totalComplaints++;
-      complaintsPerMonth[dt.month - 1]++;
+      total++;
+      perMonth[dt.month - 1]++;
     }
 
-    final months = const [
+    const months = [
       'Jan',
       'Feb',
       'Mar',
@@ -2048,24 +1978,21 @@ class _ComplaintsReportCard extends StatelessWidget {
       'Nov',
       'Dec',
     ];
-
-    final sb = StringBuffer();
-    sb.writeln('Report,Complaints Only');
-    sb.writeln('MOH Area,${_titleCase(mohArea)}');
-    sb.writeln('Year,$year');
-    sb.writeln('Generated At,${DateTime.now().toIso8601String()}');
-    sb.writeln();
-    sb.writeln('KPI,Value,Notes');
-    sb.writeln('Total Complaints,$totalComplaints,Current year only');
-    sb.writeln();
-    sb.writeln('Month,Complaints');
+    final sb = StringBuffer()
+      ..writeln('Report,Complaints (National)')
+      ..writeln('Year,$year')
+      ..writeln('Generated At,${DateTime.now().toIso8601String()}')
+      ..writeln()
+      ..writeln('KPI,Value,Notes')
+      ..writeln('Total Complaints,$total,Current year only')
+      ..writeln()
+      ..writeln('Month,Complaints');
     for (var i = 0; i < 12; i++) {
-      sb.writeln('${months[i]},${complaintsPerMonth[i]}');
+      sb.writeln('${months[i]},${perMonth[i]}');
     }
 
     final csv = sb.toString();
-    final filename =
-        'complaints_report_${_titleCase(mohArea).replaceAll(" ", "_")}_$year.csv';
+    final filename = 'ndcu_complaints_$year.csv';
     if (kIsWeb) {
       final bytes = utf8.encode(csv);
       final blob = html.Blob([bytes], 'text/csv');
@@ -2081,7 +2008,7 @@ class _ComplaintsReportCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Web download only; for desktop use FileSaver/path_provider later.',
+            'CSV export works on Web; for mobile/desktop use path_provider or file_saver.',
           ),
         ),
       );
@@ -2136,7 +2063,7 @@ class _ComplaintsReportCard extends StatelessWidget {
   }
 }
 
-// =============== shared panel bits ===============
+/* =============== shared panel bits =============== */
 class _Panel extends StatelessWidget {
   final String title;
   final String? tabHint;
@@ -2344,7 +2271,6 @@ class _BigNumber extends StatelessWidget {
   }
 }
 
-// =============== tiny legend helper ===============
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'analytics.dart';
-import 'MapPage.dart';
+import 'ndcuanalytic.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 
 class ComplaintsPage extends StatefulWidget {
@@ -26,7 +25,6 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
 
   String username = 'Loading...';
   String? _role;
-  String? _mohArea;
   Stream<QuerySnapshot>? _complaintsStream;
 
   @override
@@ -58,7 +56,6 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
       setState(() {
         username = 'Unknown User';
         _role = null;
-        _mohArea = null;
         _complaintsStream = complaintsBase()
             .orderBy('timestamp', descending: true)
             .snapshots();
@@ -69,36 +66,26 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     final data = (userDoc.data() as Map<String, dynamic>);
     final displayName = _readStr(data, 'username', 'name') ?? 'User';
     final role = _readStr(data, 'role');
-    final mohArea = _readStr(data, 'moh_area', 'mohArea');
 
     setState(() {
       username = displayName;
       _role = role;
-      _mohArea = mohArea;
       _complaintsStream = complaintsBase()
           .orderBy('timestamp', descending: true)
           .snapshots();
     });
   }
 
-  /// Only MOH users are scoped to their own `moh_area`. Everyone else (if any)
-  /// falls back to the full collection.
+  // NDCU: see everything (no MOH scoping)
   Query complaintsBase() {
-    final col = FirebaseFirestore.instance.collection('complaints');
-    final role = _role?.toLowerCase();
-
-    if (role == 'moh' && (_mohArea?.isNotEmpty ?? false)) {
-      return col.where('moh_area', isEqualTo: _mohArea);
-    }
-
-    return col; // non-MOH fallback
+    return FirebaseFirestore.instance.collection('complaints');
   }
 
   // ===== UI =====
   @override
   Widget build(BuildContext context) {
     final roleLower = _role?.toLowerCase();
-    final orgTitle = roleLower == 'moh' ? 'MOH COMPLAINTS' : 'COMPLAINTS';
+    const orgTitle = 'NDCU COMPLAINTS';
 
     return Scaffold(
       backgroundColor: bg,
@@ -134,8 +121,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Dynamic title (MOH vs Generic)
-                            Text(
+                            const Text(
                               orgTitle,
                               style: TextStyle(
                                 color: text,
@@ -145,16 +131,10 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 6),
-                            // Role + (if MOH) area chip
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: [
-                                _RoleChip(role: roleLower ?? 'guest'),
-                                if (roleLower == 'moh' &&
-                                    (_mohArea?.isNotEmpty ?? false))
-                                  _AreaChip(area: _mohArea!),
-                              ],
+                              children: [_RoleChip(role: roleLower ?? 'ndcu')],
                             ),
                           ],
                         ),
@@ -177,22 +157,13 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                     );
                   },
                 ),
-                _SideNavItem(
+                const _SideNavItem(
                   icon: Icons.receipt_long_outlined,
                   label: 'Complaints',
                   active: true,
-                  onTap: () {
-                    Navigator.pushReplacement(
-                      context,
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const ComplaintsPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
+                  onTap: null,
                 ),
-
+                // (No Maps entry here unless you still want it for NDCU)
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -206,7 +177,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                       Expanded(
                         child: Text(
                           username,
-                          style: TextStyle(color: subtext, fontSize: 12),
+                          style: const TextStyle(color: subtext, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -231,22 +202,13 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header line
-                  Builder(
-                    builder: (_) {
-                      final role = _role?.toLowerCase();
-                      final title =
-                          (role == 'moh' && (_mohArea?.isNotEmpty ?? false))
-                          ? 'Complaints in ${_mohArea!}'
-                          : 'Complaints';
-                      return Text(
-                        title,
-                        style: const TextStyle(
-                          color: text,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      );
-                    },
+                  const Text(
+                    'All Complaints (NDCU)',
+                    style: TextStyle(
+                      color: text,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -352,7 +314,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                 }
                                 if (!snapshot.hasData ||
                                     snapshot.data!.docs.isEmpty) {
-                                  return Center(
+                                  return const Center(
                                     child: Text(
                                       'No Complaints Found',
                                       style: TextStyle(color: subtext),
@@ -460,13 +422,13 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         '1-10 of 97',
                         style: TextStyle(color: subtext, fontSize: 12),
                       ),
                       Row(
                         children: [
-                          Text(
+                          const Text(
                             'Rows per page: 10',
                             style: TextStyle(color: subtext, fontSize: 12),
                           ),
@@ -476,7 +438,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                             size: 18,
                           ),
                           const SizedBox(width: 16),
-                          Text(
+                          const Text(
                             '1/10',
                             style: TextStyle(color: subtext, fontSize: 12),
                           ),
@@ -723,7 +685,7 @@ class _SideNavItem extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool active;
 
   @override
@@ -834,18 +796,13 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// Small pill components for role/area
+// Small pill for role
 class _RoleChip extends StatelessWidget {
   const _RoleChip({required this.role});
   final String role;
 
   Color get _bg {
-    switch (role) {
-      case 'moh':
-        return const Color(0xFF123B2A); // deep green-ish
-      default:
-        return const Color(0xFF2A2D36);
-    }
+    return const Color(0xFF2A1F4D); // NDCU theme
   }
 
   Color get _fg => Colors.white.withOpacity(.9);
@@ -860,45 +817,16 @@ class _RoleChip extends StatelessWidget {
         border: Border.all(color: _ComplaintsPageState.border.withOpacity(.5)),
       ),
       child: Text(
-        (role.isEmpty ? 'guest' : role).toUpperCase(),
+        (role.isEmpty ? 'ndcu' : role).toUpperCase(),
         style: TextStyle(fontSize: 11, color: _fg, fontWeight: FontWeight.w700),
       ),
     );
   }
 }
 
-class _AreaChip extends StatelessWidget {
-  const _AreaChip({required this.area});
-  final String area;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2430),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _ComplaintsPageState.border.withOpacity(.5)),
-      ),
-      child: Text(
-        'Area: $area',
-        style: const TextStyle(
-          fontSize: 11,
-          color: _ComplaintsPageState.subtext,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
 /// Thumbnail that supports https and gs://
-/// - shows loading indicator
-/// - handles errors
-/// - click to preview full image
 class _ImageThumb extends StatelessWidget {
   const _ImageThumb({required this.url});
-
   final String? url;
 
   bool get _isGs => (url ?? '').startsWith('gs://');

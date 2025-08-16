@@ -73,7 +73,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
 
   // filters
   String? _statusFilter;
-  bool _filterRecoveredThisMonth = false;
+  bool _filterRecoveredThisMonth = false; // now means "this year"
   String _searchQuery = '';
   bool _saving = false;
   bool _denseTable = false;
@@ -125,8 +125,9 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       'username',
     ]) {
       final v = m[k];
-      if (v != null && v.toString().trim().isNotEmpty)
+      if (v != null && v.toString().trim().isNotEmpty) {
         return v.toString().trim();
+      }
     }
     return 'User';
   }
@@ -152,14 +153,15 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
-  DateTime get _startOfThisMonth {
+  // ===== year window for KPIs =====
+  DateTime get _startOfThisYear {
     final now = DateTime.now();
-    return DateTime(now.year, now.month);
+    return DateTime(now.year, 1, 1);
   }
 
-  DateTime get _startOfNextMonth {
+  DateTime get _startOfNextYear {
     final now = DateTime.now();
-    return DateTime(now.year, now.month + 1);
+    return DateTime(now.year + 1, 1, 1);
   }
 
   bool get _hasAnyFilterActive =>
@@ -388,8 +390,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
 
   Widget _recoveredToggle() {
     return FilterChip(
-      label: const Text('Recovered this month'),
-      selected: _filterRecoveredThisMonth,
+      label: const Text('Recovered this year'),
+      selected: _filterRecoveredThisMonth, // reused flag
       onSelected: (val) => setState(() => _filterRecoveredThisMonth = val),
       selectedColor: _primary.withOpacity(.25),
       showCheckmark: false,
@@ -467,13 +469,14 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
+  // Filter for table; shows all by default; when "Recovered this year" chip is on + status=Recovered, applies year window
   List<QueryDocumentSnapshot> _applyFilters(
     List<QueryDocumentSnapshot> docs, {
-    DateTime? startOfMonth,
-    DateTime? startOfNext,
+    DateTime? startOfMonth, // ignored
+    DateTime? startOfNext, // ignored
   }) {
-    final start = startOfMonth ?? _startOfThisMonth;
-    final next = startOfNext ?? _startOfNextMonth;
+    final start = _startOfThisYear;
+    final next = _startOfNextYear;
 
     return docs.where((doc) {
       final d = doc.data() as Map<String, dynamic>;
@@ -484,8 +487,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           final ts = d['recovered_at'] as Timestamp?;
           if (ts == null) return false;
           final dt = ts.toDate();
-          final inMonth = !dt.isBefore(start) && dt.isBefore(next);
-          if (!(s == 'recovered' && inMonth)) return false;
+          final inYear = !dt.isBefore(start) && dt.isBefore(next);
+          if (!(s == 'recovered' && inYear)) return false;
         } else {
           if (s != _statusFilter!.toLowerCase()) return false;
         }
@@ -622,7 +625,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'MOH ANALYTICS',
+                            'Patient management ',
                             style: TextStyle(
                               color: text,
                               fontWeight: FontWeight.w700,
@@ -808,60 +811,82 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                               }
 
                               final docs = snap.data!.docs;
-                              int active = 0,
-                                  deaths = 0,
-                                  dischargedThisMonth = 0,
-                                  totalThisMonth = 0;
-                              final List<Timestamp> admissionsAllTimes =
+
+                              // --- Year window ---
+                              final startOfYear = _startOfThisYear;
+                              final startOfNextYear = _startOfNextYear;
+
+                              // KPI counters (THIS YEAR)
+                              int totalThisYear = 0;
+                              int activeThisYear = 0;
+                              int dischargedThisYear = 0;
+                              int deathsThisYear = 0;
+
+                              // Sparklines (THIS YEAR)
+                              final List<Timestamp> admissionsThisYear =
                                   <Timestamp>[];
-                              final List<Timestamp> recoveredTimes =
+                              final List<Timestamp> recoveredThisYear =
                                   <Timestamp>[];
-                              final List<Timestamp> deathTimes = <Timestamp>[];
-                              final startOfMonth = _startOfThisMonth;
-                              final startOfNext = _startOfNextMonth;
+                              final List<Timestamp> deathThisYear =
+                                  <Timestamp>[];
 
                               for (final d in docs) {
                                 final m = d.data() as Map<String, dynamic>;
                                 final s = (m['status'] ?? '')
                                     .toString()
                                     .toLowerCase();
+
                                 final doa = m['date_of_admission'];
                                 if (doa is Timestamp) {
-                                  admissionsAllTimes.add(doa);
                                   final ad = doa.toDate();
-                                  if (!ad.isBefore(startOfMonth) &&
-                                      ad.isBefore(startOfNext))
-                                    totalThisMonth++;
+                                  final inYear =
+                                      !ad.isBefore(startOfYear) &&
+                                      ad.isBefore(startOfNextYear);
+                                  if (inYear) {
+                                    totalThisYear++;
+                                    admissionsThisYear.add(doa);
+                                    if (s == 'active') activeThisYear++;
+                                  }
                                 }
-                                if (s == 'active') {
-                                  active++;
+
+                                if (s == 'recovered') {
+                                  final ra = m['recovered_at'];
+                                  if (ra is Timestamp) {
+                                    final dt = ra.toDate();
+                                    final inYear =
+                                        !dt.isBefore(startOfYear) &&
+                                        dt.isBefore(startOfNextYear);
+                                    if (inYear) {
+                                      dischargedThisYear++;
+                                      recoveredThisYear.add(ra);
+                                    }
+                                  }
                                 } else if (s == 'deceased') {
                                   final da = m['deceased_at'];
-                                  if (da is Timestamp) deathTimes.add(da);
-                                  deaths++;
-                                } else if (s == 'recovered') {
-                                  final ra = m['recovered_at'] as Timestamp?;
-                                  if (ra != null) {
-                                    recoveredTimes.add(ra);
-                                    final dt = ra.toDate();
-                                    if (!dt.isBefore(startOfMonth) &&
-                                        dt.isBefore(startOfNext)) {
-                                      dischargedThisMonth++;
+                                  if (da is Timestamp) {
+                                    final dt = da.toDate();
+                                    final inYear =
+                                        !dt.isBefore(startOfYear) &&
+                                        dt.isBefore(startOfNextYear);
+                                    if (inYear) {
+                                      deathsThisYear++;
+                                      deathThisYear.add(da);
                                     }
                                   }
                                 }
                               }
 
+                              // 14-day mini charts, using the (year-filtered) events
                               final allAdmissionsSeries = _bucketPerDay(
-                                admissionsAllTimes,
+                                admissionsThisYear,
                                 days: 14,
                               );
                               final rSeries = _bucketPerDay(
-                                recoveredTimes,
+                                recoveredThisYear,
                                 days: 14,
                               );
                               final dSeries = _bucketPerDay(
-                                deathTimes,
+                                deathThisYear,
                                 days: 14,
                               );
 
@@ -872,8 +897,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                   runSpacing: _kpiGap,
                                   children: [
                                     statCardDynamic(
-                                      title: "Total Patients (This Month)",
-                                      value: totalThisMonth.toString(),
+                                      title: "Total Patients (This Year)",
+                                      value: totalThisYear.toString(),
                                       series: allAdmissionsSeries,
                                       color: _primaryDim,
                                       selected:
@@ -887,8 +912,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       height: _kpiHeight,
                                     ),
                                     statCardDynamic(
-                                      title: "Current Patients",
-                                      value: active.toString(),
+                                      title: "Current Patients (This Year)",
+                                      value: activeThisYear.toString(),
                                       series: allAdmissionsSeries,
                                       color: const Color(0xFF6EA8FE),
                                       selected:
@@ -907,8 +932,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       height: _kpiHeight,
                                     ),
                                     statCardDynamic(
-                                      title: "Discharged (This Month)",
-                                      value: dischargedThisMonth.toString(),
+                                      title: "Discharged (This Year)",
+                                      value: dischargedThisYear.toString(),
                                       series: rSeries,
                                       color: const Color(0xFF5FD7C5),
                                       selected:
@@ -928,8 +953,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       height: _kpiHeight,
                                     ),
                                     statCardDynamic(
-                                      title: "Deceased",
-                                      value: deaths.toString(),
+                                      title: "Deceased (This Year)",
+                                      value: deathsThisYear.toString(),
                                       series: dSeries,
                                       color: const Color(0xFFFF6B6B),
                                       selected:
@@ -1193,35 +1218,35 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                             flex: 1,
                             child: Text(
                               '${index + 1}',
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               (data['fullname'] ?? '').toString(),
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 2,
                             child: Text(
                               (data['gender'] ?? '').toString(),
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 1,
                             child: Text(
                               '$age',
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               admissionDate,
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
@@ -1243,7 +1268,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       data['moh_area'] ??
                                       '')
                                   .toString(),
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
@@ -1253,14 +1278,14 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                       data['phi_area'] ??
                                       '')
                                   .toString(),
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               (data['address'] ?? '').toString(),
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                         ],
@@ -1286,7 +1311,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           BoxShadow(
             color: Colors.black.withOpacity(0.35),
             blurRadius: 10,
-            offset: Offset(2, 4),
+            offset: const Offset(2, 4),
           ),
         ],
         border: Border.all(color: _ink.withOpacity(.35)),
@@ -1849,7 +1874,7 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
   final _phiKey = GlobalKey<FormFieldState<String>>();
 
   bool _loading = true;
-  String? _error; // 👈 show what went wrong
+  String? _error; // show what went wrong
 
   Map<String, List<String>> _map = {};
   List<String> _mohList = [];
@@ -1868,7 +1893,7 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
 
   Future<void> _load() async {
     try {
-      // ✅ Asset-only for now (no Firestore dependency)
+      // Asset-only for now (no Firestore dependency)
       final jsonStr = await rootBundle.loadString('images/phi_area.json');
       final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
 
