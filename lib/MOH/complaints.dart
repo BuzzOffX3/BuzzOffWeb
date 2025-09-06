@@ -1,10 +1,15 @@
+import 'dart:html'
+    as html; // web-only open; your project already uses this elsewhere
+import 'package:buzzoffwebnew/MOH/map.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'analytics.dart';
-import 'MapPage.dart';
+import 'map.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 class ComplaintsPage extends StatefulWidget {
   const ComplaintsPage({super.key});
@@ -35,12 +40,16 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     fetchUserData();
   }
 
-  String? _readStr(Map<String, dynamic> m, String k1, [String? k2]) {
-    if (m[k1] is String && (m[k1] as String).trim().isNotEmpty) {
-      return (m[k1] as String).trim();
-    }
-    if (k2 != null && m[k2] is String && (m[k2] as String).trim().isNotEmpty) {
-      return (m[k2] as String).trim();
+  String? _readStr(
+    Map<String, dynamic> m,
+    String k1, [
+    String? k2,
+    String? k3,
+  ]) {
+    for (final k in [k1, k2, k3]) {
+      if (k == null) continue;
+      final v = m[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
     }
     return null;
   }
@@ -66,7 +75,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
       return;
     }
 
-    final data = (userDoc.data() as Map<String, dynamic>);
+    final data = userDoc.data() as Map<String, dynamic>;
     final displayName = _readStr(data, 'username', 'name') ?? 'User';
     final role = _readStr(data, 'role');
     final mohArea = _readStr(data, 'moh_area', 'mohArea');
@@ -81,20 +90,16 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     });
   }
 
-  /// Only MOH users are scoped to their own `moh_area`. Everyone else (if any)
-  /// falls back to the full collection.
+  /// MOH users scoped to their own `moh_area`. Others see all.
   Query complaintsBase() {
     final col = FirebaseFirestore.instance.collection('complaints');
     final role = _role?.toLowerCase();
-
     if (role == 'moh' && (_mohArea?.isNotEmpty ?? false)) {
       return col.where('moh_area', isEqualTo: _mohArea);
     }
-
-    return col; // non-MOH fallback
+    return col;
   }
 
-  // ===== UI =====
   @override
   Widget build(BuildContext context) {
     final roleLower = _role?.toLowerCase();
@@ -134,10 +139,9 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Dynamic title (MOH vs Generic)
                             Text(
                               orgTitle,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: text,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: .5,
@@ -145,7 +149,6 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 6),
-                            // Role + (if MOH) area chip
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
@@ -181,18 +184,22 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                   icon: Icons.receipt_long_outlined,
                   label: 'Complaints',
                   active: true,
+                  onTap: () {},
+                ),
+                _SideNavItem(
+                  icon: Icons.map_outlined,
+                  label: 'Map',
                   onTap: () {
                     Navigator.pushReplacement(
                       context,
                       PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const ComplaintsPage(),
+                        pageBuilder: (_, __, ___) => const MapPage(),
                         transitionDuration: Duration.zero,
                         reverseTransitionDuration: Duration.zero,
                       ),
                     );
                   },
                 ),
-
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -206,7 +213,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                       Expanded(
                         child: Text(
                           username,
-                          style: TextStyle(color: subtext, fontSize: 12),
+                          style: const TextStyle(color: subtext, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -257,7 +264,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
 
                   // ===== KPI ROW =====
                   SizedBox(
-                    height: 110,
+                    height: 100,
                     child: Row(
                       children: [
                         Expanded(
@@ -303,35 +310,9 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-                  // ===== TABLE HEADER =====
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: panel,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: border),
-                    ),
-                    child: Row(
-                      children: [
-                        _th('#', flex: 1),
-                        _th('Name', flex: 3),
-                        _th('Description', flex: 2),
-                        _th('Image', flex: 2),
-                        _th('Map Link', flex: 2),
-                        _th('Date', flex: 2),
-                        _th('Time', flex: 2),
-                        _th('Status', flex: 3),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // ===== TABLE BODY =====
+                  // ===== CARDS GRID (smaller "podak") =====
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -339,6 +320,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: border),
                       ),
+                      padding: const EdgeInsets.all(12),
                       child: _complaintsStream == null
                           ? const Center(child: CircularProgressIndicator())
                           : StreamBuilder<QuerySnapshot>(
@@ -352,7 +334,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                 }
                                 if (!snapshot.hasData ||
                                     snapshot.data!.docs.isEmpty) {
-                                  return Center(
+                                  return const Center(
                                     child: Text(
                                       'No Complaints Found',
                                       style: TextStyle(color: subtext),
@@ -361,144 +343,155 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                 }
 
                                 final docs = snapshot.data!.docs;
-                                return ListView.separated(
-                                  itemCount: docs.length,
-                                  separatorBuilder: (_, __) => Divider(
-                                    color: border.withOpacity(.6),
-                                    height: 1,
-                                  ),
-                                  itemBuilder: (context, index) {
-                                    final doc = docs[index];
-                                    final data =
-                                        doc.data() as Map<String, dynamic>;
 
-                                    final isAnonymous =
-                                        (data['isAnonymous'] ?? true) as bool;
-                                    final userId = _readStr(data, 'uid');
-                                    final location = _readStr(data, 'location');
-                                    final description = _readStr(
-                                      data,
-                                      'description',
-                                    );
-                                    final imageUrl =
-                                        _readStr(data, 'imageUrl') ??
-                                        _readStr(data, 'image_url') ??
-                                        _readStr(data, 'image');
-                                    final mapUrl =
-                                        _readStr(data, 'mapUrl') ??
-                                        _readStr(data, 'map_link') ??
-                                        _readStr(data, 'maplink') ??
-                                        _readStr(data, 'location_url');
-                                    final ts = data['timestamp'] is Timestamp
-                                        ? data['timestamp'] as Timestamp
-                                        : null;
-                                    final initialStatus =
-                                        _readStr(data, 'status') ?? 'Pending';
+                                return LayoutBuilder(
+                                  builder: (_, c) {
+                                    final w = c.maxWidth;
+                                    int cross = 3;
+                                    if (w < 720) {
+                                      cross = 1;
+                                    } else if (w < 1100) {
+                                      cross = 2;
+                                    }
+                                    return GridView.builder(
+                                      itemCount: docs.length,
+                                      gridDelegate:
+                                          SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: cross,
+                                            crossAxisSpacing: 12,
+                                            mainAxisSpacing: 12,
+                                            // Smaller cards: more compact ratio
+                                            childAspectRatio: 1.9,
+                                          ),
+                                      itemBuilder: (context, index) {
+                                        final doc = docs[index];
+                                        final data =
+                                            doc.data() as Map<String, dynamic>;
 
-                                    if (isAnonymous ||
-                                        userId == null ||
-                                        userId.isEmpty) {
-                                      return _complaintRow(
-                                        index: index,
-                                        name: 'Anonymous',
-                                        location: location,
-                                        description: description,
-                                        imageUrl: imageUrl,
-                                        mapUrl: mapUrl,
-                                        timestamp: ts,
-                                        docId: doc.id,
-                                        initialStatus: initialStatus,
-                                      );
-                                    } else {
-                                      return FutureBuilder<DocumentSnapshot>(
-                                        future: FirebaseFirestore.instance
-                                            .collection('users')
-                                            .doc(userId)
-                                            .get(),
-                                        builder: (context, userSnap) {
-                                          String displayName = 'Unknown User';
-                                          if (userSnap.connectionState ==
-                                                  ConnectionState.done &&
-                                              userSnap.hasData &&
-                                              userSnap.data != null &&
-                                              userSnap.data!.exists) {
-                                            final u =
-                                                userSnap.data!.data()
-                                                    as Map<String, dynamic>;
-                                            displayName =
-                                                _readStr(
-                                                  u,
-                                                  'name',
-                                                  'username',
-                                                ) ??
-                                                'Unknown User';
-                                          }
-                                          return _complaintRow(
-                                            index: index,
-                                            name: displayName,
-                                            location: location,
+                                        final isAnonymous =
+                                            (data['isAnonymous'] ?? true)
+                                                as bool;
+                                        final userId = _readStr(data, 'uid');
+
+                                        // Address from complaints collection
+                                        final address =
+                                            _readStr(
+                                              data,
+                                              'address',
+                                              'location',
+                                              'addr',
+                                            ) ??
+                                            '';
+
+                                        final description = _readStr(
+                                          data,
+                                          'description',
+                                        );
+
+                                        final imageUrl = _readStr(
+                                          data,
+                                          'imageUrl',
+                                          'image_url',
+                                          'image',
+                                        );
+
+                                        final mapUrl = _readStr(
+                                          data,
+                                          'mapUrl',
+                                          'map_link',
+                                          'location_url',
+                                        );
+
+                                        final ts =
+                                            data['timestamp'] is Timestamp
+                                            ? data['timestamp'] as Timestamp
+                                            : null;
+                                        final initialStatus =
+                                            _readStr(data, 'status') ??
+                                            'Pending';
+
+                                        final dt =
+                                            ts?.toDate() ?? DateTime.now();
+                                        final dateStr = DateFormat(
+                                          'dd/MM/yyyy',
+                                        ).format(dt);
+                                        final timeStr = DateFormat(
+                                          'hh:mm a',
+                                        ).format(dt);
+
+                                        // Resolve display name
+                                        Future<Widget> buildCard(
+                                          String name,
+                                        ) async {
+                                          return _ComplaintCard(
+                                            docId: doc.id,
+                                            displayName: name,
+                                            address: address,
                                             description: description,
                                             imageUrl: imageUrl,
                                             mapUrl: mapUrl,
-                                            timestamp: ts,
-                                            docId: doc.id,
+                                            dateStr: dateStr,
+                                            timeStr: timeStr,
                                             initialStatus: initialStatus,
+                                            onDirections: () =>
+                                                _showDirectionsDialog(
+                                                  address: address,
+                                                  mapUrl: mapUrl,
+                                                ),
                                           );
-                                        },
-                                      );
-                                    }
+                                        }
+
+                                        if (isAnonymous ||
+                                            userId == null ||
+                                            userId.isEmpty) {
+                                          return FutureBuilder<Widget>(
+                                            future: buildCard('Anonymous'),
+                                            builder: (_, snap) =>
+                                                snap.data ?? const SizedBox(),
+                                          );
+                                        } else {
+                                          return FutureBuilder<
+                                            DocumentSnapshot
+                                          >(
+                                            future: FirebaseFirestore.instance
+                                                .collection('users')
+                                                .doc(userId)
+                                                .get(),
+                                            builder: (context, userSnap) {
+                                              String displayName =
+                                                  'Unknown User';
+                                              if (userSnap.connectionState ==
+                                                      ConnectionState.done &&
+                                                  userSnap.hasData &&
+                                                  userSnap.data != null &&
+                                                  userSnap.data!.exists) {
+                                                final u =
+                                                    userSnap.data!.data()
+                                                        as Map<String, dynamic>;
+                                                displayName =
+                                                    _readStr(
+                                                      u,
+                                                      'name',
+                                                      'username',
+                                                    ) ??
+                                                    'Unknown User';
+                                              }
+                                              return FutureBuilder<Widget>(
+                                                future: buildCard(displayName),
+                                                builder: (_, snap) =>
+                                                    snap.data ??
+                                                    const SizedBox(),
+                                              );
+                                            },
+                                          );
+                                        }
+                                      },
+                                    );
                                   },
                                 );
                               },
                             ),
                     ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // footer (static for now)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '1-10 of 97',
-                        style: TextStyle(color: subtext, fontSize: 12),
-                      ),
-                      Row(
-                        children: [
-                          Text(
-                            'Rows per page: 10',
-                            style: TextStyle(color: subtext, fontSize: 12),
-                          ),
-                          const Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.white54,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 16),
-                          Text(
-                            '1/10',
-                            style: TextStyle(color: subtext, fontSize: 12),
-                          ),
-                          IconButton(
-                            onPressed: () {},
-                            icon: const Icon(
-                              Icons.chevron_left,
-                              color: Colors.white54,
-                              size: 18,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () {},
-                            icon: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.white54,
-                              size: 18,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -509,204 +502,97 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     );
   }
 
-  // ===== TABLE HELPERS =====
-  Widget _th(String label, {required int flex}) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: text,
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
-        ),
-      ),
-    );
-  }
-
-  Widget _complaintRow({
-    required int index,
-    required String name,
-    required String? location,
-    required String? description,
-    required String? imageUrl,
+  // ===== Directions dialog (no extra packages) =====
+  void _showDirectionsDialog({
+    required String? address,
     required String? mapUrl,
-    required Timestamp? timestamp,
-    required String docId,
-    required String initialStatus,
   }) {
-    final dt = timestamp?.toDate() ?? DateTime.now();
-    final dateStr = '${dt.day}/${dt.month}/${dt.year}';
-    final timeStr = DateFormat('hh:mm a').format(dt);
+    final addr = (address ?? '').trim();
+    final hasAddr = addr.isNotEmpty;
+    final hasMap = (mapUrl ?? '').trim().isNotEmpty;
 
-    String selectedStatus = initialStatus;
+    // Build Google Maps directions URL (web-friendly)
+    final String? googleDir = hasAddr
+        ? "https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(addr)}&travelmode=driving"
+        : (hasMap ? mapUrl!.trim() : null);
 
-    Color statusColor(String status) {
-      switch (status) {
-        case 'Pending':
-          return const Color(0xFFFFB020);
-        case 'Under Investigation':
-          return const Color(0xFFFF5C5C);
-        case 'Reviewed':
-          return const Color(0xFF3DDC97);
-        default:
-          return Colors.white;
-      }
-    }
-
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: false,
-                      onChanged: (v) {},
-                      side: const BorderSide(color: border),
-                      checkColor: Colors.black,
-                      activeColor: purple,
-                    ),
-                    Text('${index + 1}', style: const TextStyle(color: text)),
-                  ],
-                ),
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: panel,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Directions', style: TextStyle(color: text)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasAddr) ...[
+              const Text(
+                'Address:',
+                style: TextStyle(color: subtext, fontSize: 12),
               ),
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        color: text,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      location ?? 'No Location',
-                      style: const TextStyle(color: subtext, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  description ?? 'No Description',
-                  style: const TextStyle(color: text),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-              SizedBox(
-                width: 120,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 50.0),
-                  child: _ImageThumb(url: imageUrl),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: InkWell(
-                  onTap: (mapUrl != null && mapUrl.isNotEmpty)
-                      ? () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              backgroundColor: panel,
-                              title: const Text(
-                                'Map Link',
-                                style: TextStyle(color: text),
-                              ),
-                              content: SelectableText(
-                                mapUrl!,
-                                style: const TextStyle(color: subtext),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Close'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      : null,
-                  child: Text(
-                    (mapUrl != null && mapUrl!.isNotEmpty)
-                        ? 'Open'
-                        : 'Map Link',
-                    style: const TextStyle(
-                      color: purple,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(dateStr, style: const TextStyle(color: text)),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(timeStr, style: const TextStyle(color: text)),
-              ),
-              Expanded(
-                flex: 3,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: border.withOpacity(.25),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: border),
-                  ),
-                  child: DropdownButton<String>(
-                    value: selectedStatus,
-                    isExpanded: true,
-                    dropdownColor: panel,
-                    underline: const SizedBox(),
-                    iconEnabledColor: text,
-                    style: TextStyle(
-                      color: statusColor(selectedStatus),
-                      fontWeight: FontWeight.w700,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Pending',
-                        child: Text('Pending'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Under Investigation',
-                        child: Text('Under Investigation'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Reviewed',
-                        child: Text('Reviewed'),
-                      ),
-                    ],
-                    onChanged: (v) async {
-                      if (v == null) return;
-                      setState(() => selectedStatus = v);
-                      try {
-                        await FirebaseFirestore.instance
-                            .collection('complaints')
-                            .doc(docId)
-                            .update({'status': v});
-                      } catch (_) {}
-                    },
-                  ),
-                ),
-              ),
+              const SizedBox(height: 4),
+              SelectableText(addr, style: const TextStyle(color: text)),
+              const SizedBox(height: 12),
             ],
+            if (hasMap)
+              const Text(
+                'A stored map link is available.',
+                style: TextStyle(color: subtext, fontSize: 12),
+              ),
+            if (!hasAddr && !hasMap)
+              const Text(
+                'No address or map link is available for this complaint.',
+                style: TextStyle(color: subtext),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (hasAddr) {
+                await Clipboard.setData(ClipboardData(text: addr));
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Address copied')),
+                  );
+                }
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            child: const Text(
+              'Copy Address',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
-        );
-      },
+          if (googleDir != null)
+            TextButton(
+              onPressed: () {
+                // Open externally on web; on other platforms user can paste the copied link
+                if (kIsWeb) {
+                  html.window.open(googleDir, '_blank');
+                } else {
+                  Clipboard.setData(ClipboardData(text: googleDir));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Link copied. Open it in Google Maps.'),
+                    ),
+                  );
+                }
+              },
+              child: const Text(
+                'Open Directions',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Colors.white70)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -775,7 +661,6 @@ class _KpiCard extends StatelessWidget {
     required this.query,
     required this.color,
   });
-
   final String title;
   final Query query;
   final Color color;
@@ -793,7 +678,7 @@ class _KpiCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: border),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: StreamBuilder<QuerySnapshot>(
         stream: query.snapshots(),
         builder: (context, snap) {
@@ -818,14 +703,14 @@ class _KpiCard extends StatelessWidget {
                     '$count',
                     style: const TextStyle(
                       color: text,
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.w800,
                       letterSpacing: .3,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
             ],
           );
         },
@@ -834,7 +719,7 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// Small pill components for role/area
+// Role/area chips
 class _RoleChip extends StatelessWidget {
   const _RoleChip({required this.role});
   final String role;
@@ -842,13 +727,11 @@ class _RoleChip extends StatelessWidget {
   Color get _bg {
     switch (role) {
       case 'moh':
-        return const Color(0xFF123B2A); // deep green-ish
+        return const Color(0xFF123B2A);
       default:
         return const Color(0xFF2A2D36);
     }
   }
-
-  Color get _fg => Colors.white.withOpacity(.9);
 
   @override
   Widget build(BuildContext context) {
@@ -861,7 +744,11 @@ class _RoleChip extends StatelessWidget {
       ),
       child: Text(
         (role.isEmpty ? 'guest' : role).toUpperCase(),
-        style: TextStyle(fontSize: 11, color: _fg, fontWeight: FontWeight.w700),
+        style: const TextStyle(
+          fontSize: 11,
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -892,13 +779,9 @@ class _AreaChip extends StatelessWidget {
   }
 }
 
-/// Thumbnail that supports https and gs://
-/// - shows loading indicator
-/// - handles errors
-/// - click to preview full image
+/// Thumbnail supporting https and gs:// (smaller podak size)
 class _ImageThumb extends StatelessWidget {
   const _ImageThumb({required this.url});
-
   final String? url;
 
   bool get _isGs => (url ?? '').startsWith('gs://');
@@ -918,8 +801,8 @@ class _ImageThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double h = 48;
-    const double w = 72;
+    const double h = 84; // smaller
+    const double w = 120; // smaller
 
     if (url == null || url!.isEmpty) {
       return const Text(
@@ -999,7 +882,7 @@ class _ImageThumb extends StatelessWidget {
             );
           },
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             child: Image.network(
               resolved,
               height: h,
@@ -1019,6 +902,278 @@ class _ImageThumb extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// A single (smaller) complaint card
+class _ComplaintCard extends StatelessWidget {
+  const _ComplaintCard({
+    required this.docId,
+    required this.displayName,
+    required this.address,
+    required this.description,
+    required this.imageUrl,
+    required this.mapUrl,
+    required this.dateStr,
+    required this.timeStr,
+    required this.initialStatus,
+    required this.onDirections,
+  });
+
+  final String docId;
+  final String displayName;
+  final String address;
+  final String? description;
+  final String? imageUrl;
+  final String? mapUrl;
+  final String dateStr;
+  final String timeStr;
+  final String initialStatus;
+  final VoidCallback onDirections;
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Pending':
+        return const Color(0xFFFFB020);
+      case 'Under Investigation':
+        return const Color(0xFFFF5C5C);
+      case 'Reviewed':
+        return const Color(0xFF3DDC97);
+      default:
+        return Colors.white;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String selectedStatus = initialStatus;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Container(
+          decoration: BoxDecoration(
+            color: _ComplaintsPageState.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _ComplaintsPageState.border),
+          ),
+          padding: const EdgeInsets.all(12), // smaller padding
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top: name + status dropdown
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      displayName,
+                      style: const TextStyle(
+                        color: _ComplaintsPageState.text,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: _ComplaintsPageState.border.withOpacity(.22),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _ComplaintsPageState.border),
+                    ),
+                    child: DropdownButton<String>(
+                      value: selectedStatus,
+                      isDense: true,
+                      dropdownColor: _ComplaintsPageState.panel,
+                      underline: const SizedBox(),
+                      iconEnabledColor: _ComplaintsPageState.text,
+                      style: TextStyle(
+                        color: _statusColor(selectedStatus),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Pending',
+                          child: Text('Pending'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Under Investigation',
+                          child: Text('Under Investigation'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Reviewed',
+                          child: Text('Reviewed'),
+                        ),
+                      ],
+                      onChanged: (v) async {
+                        if (v == null) return;
+                        setState(() => selectedStatus = v);
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('complaints')
+                              .doc(docId)
+                              .update({'status': v});
+                        } catch (_) {}
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Mid: image + right content
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ImageThumb(url: imageUrl),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (address.isNotEmpty)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.place,
+                                color: _ComplaintsPageState.purple,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  address,
+                                  style: const TextStyle(
+                                    color: _ComplaintsPageState.text,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 6),
+                        Text(
+                          description ?? 'No Description',
+                          style: const TextStyle(
+                            color: _ComplaintsPageState.subtext,
+                            fontSize: 12.5,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          children: [
+                            _ChipIcon(
+                              icon: Icons.calendar_month,
+                              label: dateStr,
+                            ),
+                            _ChipIcon(icon: Icons.access_time, label: timeStr),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              // Actions
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _ComplaintsPageState.purple,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                    ),
+                    onPressed: onDirections,
+                    icon: const Icon(Icons.directions, size: 16),
+                    label: const Text(
+                      'Directions',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if ((mapUrl ?? '').isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () {
+                        final link = mapUrl!.trim();
+                        if (kIsWeb) {
+                          html.window.open(link, '_blank');
+                        } else {
+                          Clipboard.setData(ClipboardData(text: link));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Map link copied. Open it in Google Maps.',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(
+                        Icons.map,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                      label: const Text(
+                        'Open Map',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                  const Spacer(),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ChipIcon extends StatelessWidget {
+  const _ChipIcon({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _ComplaintsPageState.panelAlt,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _ComplaintsPageState.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: _ComplaintsPageState.subtext),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: _ComplaintsPageState.subtext,
+              fontSize: 11.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -22,7 +22,7 @@ const sectionTitleStyle = TextStyle(
   fontWeight: FontWeight.bold,
 );
 
-// ======= THEME =======
+// ======= THEME & BREAKPOINTS =======
 const _bg = Color(0xFF0C0F1A);
 const _sidebar = Color(0xFF121826);
 const _panel = Color(0xFF0F1522);
@@ -39,41 +39,41 @@ const double _kpiWidth = 300;
 const double _kpiHeight = 160;
 const double _kpiGap = 22;
 const double _pageMaxWidth = 1560;
+
 const Color sidebar = _sidebar;
 const Color purple = _primary;
 const Color text = Colors.white;
 const Color subtext = Colors.white70;
 
+// responsive breakpoints
+const double _bpMd = 900; // switch to drawer + stacked content
+const double _bpLg = 1200; // roomier layouts
+
 class _PatientManagementPageState extends State<PatientManagementPage> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   DocumentSnapshot? selectedPatient;
 
   String? _uid;
   String username = 'User';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSub;
 
-  // right-panel controllers
+  // right-panel controllers (ONLY kept fields)
   final TextEditingController nameController = TextEditingController();
-  final TextEditingController genderController = TextEditingController();
-  final TextEditingController guardianNameController = TextEditingController();
   final TextEditingController guardianContactController =
       TextEditingController();
   final TextEditingController phoneController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
   final TextEditingController mohAreaController = TextEditingController();
   final TextEditingController phiAreaController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
-  final TextEditingController wardNoController = TextEditingController();
-  final TextEditingController bedNoController = TextEditingController();
-  final TextEditingController medicineController = TextEditingController();
-  final TextEditingController remarkController = TextEditingController();
   final TextEditingController schoolWorkController = TextEditingController();
 
+  // we still read/display status in table/KPIs, but no longer edit it here
   String? status;
-  String? type;
 
   // filters
   String? _statusFilter;
-  bool _filterRecoveredThisMonth = false; // now means "this year"
+  bool _filterRecoveredThisMonth = false; // reused as "this year"
   String _searchQuery = '';
   bool _saving = false;
   bool _denseTable = false;
@@ -99,18 +99,11 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   void dispose() {
     _profileSub?.cancel();
     nameController.dispose();
-    genderController.dispose();
-    guardianNameController.dispose();
     guardianContactController.dispose();
     phoneController.dispose();
-    emailController.dispose();
     mohAreaController.dispose();
     phiAreaController.dispose();
     addressController.dispose();
-    wardNoController.dispose();
-    bedNoController.dispose();
-    medicineController.dispose();
-    remarkController.dispose();
     schoolWorkController.dispose();
     super.dispose();
   }
@@ -180,15 +173,9 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     final data = doc.data() as Map<String, dynamic>;
 
     nameController.text = (data['fullname'] ?? '').toString();
-    genderController.text = (data['gender'] ?? '').toString();
-
-    guardianNameController.text =
-        (data['guardian_name'] ?? data['guardian_name '] ?? '').toString();
     guardianContactController.text = (data['guardian_contact'] ?? '')
         .toString();
-
     phoneController.text = (data['phone_number'] ?? '').toString();
-    emailController.text = (data['email'] ?? '').toString();
 
     mohAreaController.text =
         (data['patient_moh_area'] ?? data['moh_area'] ?? '').toString();
@@ -196,23 +183,10 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         (data['patient_phi_area'] ?? data['phi_area'] ?? '').toString();
 
     addressController.text = (data['address'] ?? '').toString();
-    wardNoController.text = (data['ward_no'] ?? '').toString();
-    bedNoController.text = (data['bed_no'] ?? '').toString();
-
-    medicineController.text =
-        (data['medicine'] ??
-                data['prescribed_medicine'] ??
-                data['presecribed_medicine'] ??
-                data['medicine '] ??
-                '')
-            .toString();
-    remarkController.text = (data['remarks'] ?? data['remark'] ?? '')
-        .toString();
     schoolWorkController.text =
         (data['school_or_work'] ?? data['school/work'] ?? '').toString();
 
     status = _titleCase((data['status'] ?? '').toString());
-    type = _titleCase((data['type'] ?? '').toString());
     setState(() {});
   }
 
@@ -259,38 +233,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       return;
     }
 
-    final newStatus = (status ?? '').trim().toLowerCase();
-    final newType = (type ?? '').trim().toLowerCase();
-
-    if (newStatus == 'deceased') {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: _panelAlt,
-          title: const Text(
-            'Mark as Deceased?',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: const Text(
-            'This will mark the patient as deceased and update charts.\nAre you sure?',
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: _primary),
-              child: const Text('Confirm'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
-
     if (_saving) return;
     setState(() => _saving = true);
 
@@ -299,49 +241,18 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
           .collection('dengue_cases')
           .doc(selectedPatient!.id);
 
-      final old = (await docRef.get()).data() ?? <String, dynamic>{};
-      final oldStatus = (old['status'] ?? '').toString().toLowerCase();
-
       final updates = <String, dynamic>{
         'fullname': nameController.text.trim(),
-        'gender': genderController.text.trim(),
-        'guardian_name': guardianNameController.text.trim(),
         'guardian_contact': guardianContactController.text.trim(),
         'phone_number': phoneController.text.trim(),
-        'email': emailController.text.trim(),
         'patient_moh_area': mohAreaController.text.trim(),
         'patient_phi_area': phiAreaController.text.trim(),
         'address': addressController.text.trim(),
-        'ward_no': wardNoController.text.trim(),
-        'bed_no': bedNoController.text.trim(),
-        'medicine': medicineController.text.trim(),
-        'remarks': remarkController.text.trim(),
         'school_or_work': schoolWorkController.text.trim(),
         'updated_at': FieldValue.serverTimestamp(),
       };
 
-      if (newStatus.isNotEmpty) updates['status'] = newStatus;
-      if (newType.isNotEmpty) updates['type'] = newType;
-
-      if (newStatus != oldStatus) {
-        if (newStatus == 'recovered') {
-          updates['recovered_at'] = FieldValue.serverTimestamp();
-          updates['deceased_at'] = null;
-        } else if (newStatus == 'deceased') {
-          updates['deceased_at'] = FieldValue.serverTimestamp();
-          updates['recovered_at'] = null;
-        } else {
-          updates['recovered_at'] = null;
-          updates['deceased_at'] = null;
-        }
-      } else {
-        if (newStatus != 'recovered' && (old['recovered_at'] != null)) {
-          updates['recovered_at'] = null;
-        }
-        if (newStatus != 'deceased' && (old['deceased_at'] != null)) {
-          updates['deceased_at'] = null;
-        }
-      }
+      // NOTE: status editing removed per request; KPIs still read existing status.
 
       await docRef.set(updates, SetOptions(merge: true));
       selectedPatient = await docRef.get();
@@ -391,7 +302,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   Widget _recoveredToggle() {
     return FilterChip(
       label: const Text('Recovered this year'),
-      selected: _filterRecoveredThisMonth, // reused flag
+      selected: _filterRecoveredThisMonth,
       onSelected: (val) => setState(() => _filterRecoveredThisMonth = val),
       selectedColor: _primary.withOpacity(.25),
       showCheckmark: false,
@@ -423,58 +334,50 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     );
   }
 
-  Widget _headerAndControls() {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final isNarrow = c.maxWidth < 900;
-        final controls = Wrap(
-          alignment: isNarrow ? WrapAlignment.start : WrapAlignment.end,
-          spacing: 12,
-          runSpacing: 12,
-          children: [_searchBox(), _recoveredToggle(), _addPatientBtn()],
-        );
-        if (isNarrow) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Patient Overview",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 10),
-              controls,
-            ],
-          );
-        } else {
-          return Row(
-            children: [
-              const Text(
-                "Patient Overview",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              controls,
-            ],
-          );
-        }
-      },
+  Widget _headerAndControls(BoxConstraints c) {
+    final isNarrow = c.maxWidth < _bpMd;
+    final controls = Wrap(
+      alignment: isNarrow ? WrapAlignment.start : WrapAlignment.end,
+      spacing: 12,
+      runSpacing: 12,
+      children: [_searchBox(), _recoveredToggle(), _addPatientBtn()],
     );
+    if (isNarrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Patient Overview",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          controls,
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          const Text(
+            "Patient Overview",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          controls,
+        ],
+      );
+    }
   }
 
   // Filter for table; shows all by default; when "Recovered this year" chip is on + status=Recovered, applies year window
-  List<QueryDocumentSnapshot> _applyFilters(
-    List<QueryDocumentSnapshot> docs, {
-    DateTime? startOfMonth, // ignored
-    DateTime? startOfNext, // ignored
-  }) {
+  List<QueryDocumentSnapshot> _applyFilters(List<QueryDocumentSnapshot> docs) {
     final start = _startOfThisYear;
     final next = _startOfNextYear;
 
@@ -518,21 +421,14 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       rows.add([
         '#',
         'Full Name',
-        'Gender',
         'Age',
         'Admission Date',
         'Status',
         'Patient MOH Area',
         'Patient PHI Area',
         'Address',
-        'Guardian Name',
         'Guardian Contact',
         'Phone',
-        'Email',
-        'Ward No',
-        'Bed No',
-        'Medicine',
-        'Remarks',
         'School/Work',
       ]);
 
@@ -547,26 +443,14 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
         rows.add([
           '${i + 1}',
           (data['fullname'] ?? '').toString(),
-          (data['gender'] ?? '').toString(),
           '$age',
           admissionDate,
           (data['status'] ?? '').toString(),
           (data['patient_moh_area'] ?? data['moh_area'] ?? '').toString(),
           (data['patient_phi_area'] ?? data['phi_area'] ?? '').toString(),
           (data['address'] ?? '').toString(),
-          (data['guardian_name'] ?? data['guardian_name '] ?? '').toString(),
           (data['guardian_contact'] ?? '').toString(),
           (data['phone_number'] ?? '').toString(),
-          (data['email'] ?? '').toString(),
-          (data['ward_no'] ?? '').toString(),
-          (data['bed_no'] ?? '').toString(),
-          (data['medicine'] ??
-                  data['prescribed_medicine'] ??
-                  data['presecribed_medicine'] ??
-                  data['medicine '] ??
-                  '')
-              .toString(),
-          (data['remarks'] ?? data['remark'] ?? '').toString(),
           (data['school_or_work'] ?? data['school/work'] ?? '').toString(),
         ]);
       }
@@ -592,554 +476,494 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTextStyle(
-      style: const TextStyle(fontFamily: 'Poppins'),
-      child: Scaffold(
-        backgroundColor: _bg,
-        body: Row(
-          children: [
-            // ===== SIDEBAR =====
-            Container(
-              width: 250,
-              color: sidebar,
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final isCompact = constraints.maxWidth < _bpMd;
+        final bodyPad = isCompact ? 8.0 : 18.0;
+
+        final appBar = isCompact
+            ? AppBar(
+                backgroundColor: sidebar,
+                elevation: 0,
+                leading: IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+                title: const Text('Patient Management'),
+              )
+            : null;
+
+        final content = Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _pageMaxWidth),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: bodyPad, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: purple.withOpacity(.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.coronavirus,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Patient management ',
-                            style: TextStyle(
-                              color: text,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: .5,
+                  LayoutBuilder(builder: (c, b) => _headerAndControls(b)),
+                  const SizedBox(height: 14),
+
+                  // ===== KPI ROW =====
+                  if (_uid == null)
+                    const Center(
+                      child: Text(
+                        'Please sign in to view your hospital’s cases',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    )
+                  else
+                    StreamBuilder<QuerySnapshot>(
+                      stream: _hospitalCasesQuery(_uid!).snapshots(),
+                      builder: (context, snap) {
+                        if (snap.hasError) {
+                          return Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              'Error: ${snap.error}',
+                              style: const TextStyle(color: Colors.redAccent),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  _SideNavItem(
-                    icon: Icons.dashboard_outlined,
-                    label: 'Patient Form',
-                    onTap: () {
-                      Navigator.pushReplacement(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder: (_, __, ___) => const PatientFormPage(),
-                          transitionDuration: Duration.zero,
-                          reverseTransitionDuration: Duration.zero,
-                        ),
-                      );
-                    },
-                  ),
-                  const _SideNavItem(
-                    icon: Icons.receipt_long_outlined,
-                    label: 'Patient Management',
-                    active: true,
-                  ),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          backgroundImage: AssetImage('images/pfp.png'),
-                          radius: 16,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            username,
-                            style: const TextStyle(
-                              color: subtext,
-                              fontSize: 12,
+                          );
+                        }
+                        if (!snap.hasData) {
+                          return Center(
+                            child: Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: _kpiGap,
+                              runSpacing: _kpiGap,
+                              children: const [
+                                _StatSkeleton(),
+                                _StatSkeleton(),
+                                _StatSkeleton(),
+                                _StatSkeleton(),
+                              ],
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          color: _panelAlt,
-                          icon: const Icon(
-                            Icons.more_vert,
-                            color: Colors.white54,
-                            size: 18,
-                          ),
-                          onSelected: (value) async {
-                            if (value == 'signout') {
-                              final ok = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  backgroundColor: _panelAlt,
-                                  title: const Text(
-                                    'Sign out',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  content: const Text(
-                                    'Are you sure you want to sign out?',
-                                    style: TextStyle(color: Colors.white70),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: _primary,
-                                      ),
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text('Sign out'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (ok == true) {
-                                await FirebaseAuth.instance.signOut();
-                                if (!mounted) return;
-                                Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const SignInPage(),
-                                  ),
-                                  (route) => false,
-                                );
+                          );
+                        }
+
+                        final docs = snap.data!.docs;
+
+                        // --- Year window ---
+                        final startOfYear = _startOfThisYear;
+                        final startOfNextYear = _startOfNextYear;
+
+                        // KPI counters (THIS YEAR)
+                        int totalThisYear = 0;
+                        int activeThisYear = 0;
+                        int dischargedThisYear = 0;
+                        int deathsThisYear = 0;
+
+                        // Sparklines (THIS YEAR)
+                        final List<Timestamp> admissionsThisYear =
+                            <Timestamp>[];
+                        final List<Timestamp> recoveredThisYear = <Timestamp>[];
+                        final List<Timestamp> deathThisYear = <Timestamp>[];
+
+                        for (final d in docs) {
+                          final m = d.data() as Map<String, dynamic>;
+                          final s = (m['status'] ?? '')
+                              .toString()
+                              .toLowerCase();
+
+                          final doa = m['date_of_admission'];
+                          if (doa is Timestamp) {
+                            final ad = doa.toDate();
+                            final inYear =
+                                !ad.isBefore(startOfYear) &&
+                                ad.isBefore(startOfNextYear);
+                            if (inYear) {
+                              totalThisYear++;
+                              admissionsThisYear.add(doa);
+                              if (s == 'active') activeThisYear++;
+                            }
+                          }
+
+                          if (s == 'recovered') {
+                            final ra = m['recovered_at'];
+                            if (ra is Timestamp) {
+                              final dt = ra.toDate();
+                              final inYear =
+                                  !dt.isBefore(startOfYear) &&
+                                  dt.isBefore(startOfNextYear);
+                              if (inYear) {
+                                dischargedThisYear++;
+                                recoveredThisYear.add(ra);
                               }
                             }
-                          },
-                          itemBuilder: (ctx) => [
-                            PopupMenuItem(
-                              value: 'signout',
-                              child: Row(
-                                children: const [
-                                  Icon(
-                                    Icons.logout,
-                                    color: Colors.white70,
-                                    size: 18,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Sign out',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ],
+                          } else if (s == 'deceased') {
+                            final da = m['deceased_at'];
+                            if (da is Timestamp) {
+                              final dt = da.toDate();
+                              final inYear =
+                                  !dt.isBefore(startOfYear) &&
+                                  dt.isBefore(startOfNextYear);
+                              if (inYear) {
+                                deathsThisYear++;
+                                deathThisYear.add(da);
+                              }
+                            }
+                          }
+                        }
+
+                        // 14-day mini charts
+                        final allAdmissionsSeries = _bucketPerDay(
+                          admissionsThisYear,
+                          days: 14,
+                        );
+                        final rSeries = _bucketPerDay(
+                          recoveredThisYear,
+                          days: 14,
+                        );
+                        final dSeries = _bucketPerDay(deathThisYear, days: 14);
+
+                        return Center(
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: _kpiGap,
+                            runSpacing: _kpiGap,
+                            children: [
+                              statCardDynamic(
+                                title: "Total Patients (This Year)",
+                                value: totalThisYear.toString(),
+                                series: allAdmissionsSeries,
+                                color: _primaryDim,
+                                selected:
+                                    _statusFilter == null &&
+                                    !_filterRecoveredThisMonth,
+                                onTap: () => setState(() {
+                                  _statusFilter = null;
+                                  _filterRecoveredThisMonth = false;
+                                }),
+                                width: _kpiWidth,
+                                height: _kpiHeight,
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                              statCardDynamic(
+                                title: "Current Patients (This Year)",
+                                value: activeThisYear.toString(),
+                                series: allAdmissionsSeries,
+                                color: const Color(0xFF6EA8FE),
+                                selected:
+                                    _statusFilter == 'Active' &&
+                                    !_filterRecoveredThisMonth,
+                                onTap: () => setState(() {
+                                  if (_statusFilter == 'Active' &&
+                                      !_filterRecoveredThisMonth) {
+                                    _statusFilter = null;
+                                  } else {
+                                    _statusFilter = 'Active';
+                                    _filterRecoveredThisMonth = false;
+                                  }
+                                }),
+                                width: _kpiWidth,
+                                height: _kpiHeight,
+                              ),
+                              statCardDynamic(
+                                title: "Discharged (This Year)",
+                                value: dischargedThisYear.toString(),
+                                series: rSeries,
+                                color: const Color(0xFF5FD7C5),
+                                selected:
+                                    _statusFilter == 'Recovered' &&
+                                    _filterRecoveredThisMonth,
+                                onTap: () => setState(() {
+                                  if (_statusFilter == 'Recovered' &&
+                                      _filterRecoveredThisMonth) {
+                                    _statusFilter = null;
+                                    _filterRecoveredThisMonth = false;
+                                  } else {
+                                    _statusFilter = 'Recovered';
+                                    _filterRecoveredThisMonth = true;
+                                  }
+                                }),
+                                width: _kpiWidth,
+                                height: _kpiHeight,
+                              ),
+                              statCardDynamic(
+                                title: "Deceased (This Year)",
+                                value: deathsThisYear.toString(),
+                                series: dSeries,
+                                color: const Color(0xFFFF6B6B),
+                                selected:
+                                    _statusFilter == 'Deceased' &&
+                                    !_filterRecoveredThisMonth,
+                                onTap: () => setState(() {
+                                  if (_statusFilter == 'Deceased' &&
+                                      !_filterRecoveredThisMonth) {
+                                    _statusFilter = null;
+                                  } else {
+                                    _statusFilter = 'Deceased';
+                                    _filterRecoveredThisMonth = false;
+                                  }
+                                }),
+                                width: _kpiWidth,
+                                height: _kpiHeight,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
 
-            // ===== RIGHT CONTENT =====
-            Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _pageMaxWidth),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _headerAndControls(),
-                        const SizedBox(height: 14),
+                  const SizedBox(height: 14),
 
-                        // ===== KPI ROW =====
-                        if (_uid == null)
-                          const Center(
+                  // ===== Table + side form (responsive) =====
+                  Expanded(
+                    child: _uid == null
+                        ? const Center(
                             child: Text(
                               'Please sign in to view your hospital’s cases',
                               style: TextStyle(color: Colors.white70),
                             ),
                           )
-                        else
-                          StreamBuilder<QuerySnapshot>(
-                            stream: _hospitalCasesQuery(_uid!).snapshots(),
-                            builder: (context, snap) {
-                              if (snap.hasError) {
+                        : StreamBuilder<QuerySnapshot>(
+                            stream: _hospitalCasesQuery(_uid!)
+                                .orderBy('date_of_admission', descending: true)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasError) {
                                 return Padding(
                                   padding: const EdgeInsets.all(16),
                                   child: Text(
-                                    'Error: ${snap.error}',
+                                    'Error: ${snapshot.error}',
                                     style: const TextStyle(
                                       color: Colors.redAccent,
                                     ),
                                   ),
                                 );
                               }
-                              if (!snap.hasData) {
-                                return Center(
-                                  child: Wrap(
-                                    alignment: WrapAlignment.center,
-                                    spacing: _kpiGap,
-                                    runSpacing: _kpiGap,
-                                    children: const [
-                                      _StatSkeleton(),
-                                      _StatSkeleton(),
-                                      _StatSkeleton(),
-                                      _StatSkeleton(),
-                                    ],
-                                  ),
+                              if (!snapshot.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
                                 );
                               }
 
-                              final docs = snap.data!.docs;
+                              final all = snapshot.data!.docs;
+                              final filtered = _applyFilters(all);
 
-                              // --- Year window ---
-                              final startOfYear = _startOfThisYear;
-                              final startOfNextYear = _startOfNextYear;
-
-                              // KPI counters (THIS YEAR)
-                              int totalThisYear = 0;
-                              int activeThisYear = 0;
-                              int dischargedThisYear = 0;
-                              int deathsThisYear = 0;
-
-                              // Sparklines (THIS YEAR)
-                              final List<Timestamp> admissionsThisYear =
-                                  <Timestamp>[];
-                              final List<Timestamp> recoveredThisYear =
-                                  <Timestamp>[];
-                              final List<Timestamp> deathThisYear =
-                                  <Timestamp>[];
-
-                              for (final d in docs) {
-                                final m = d.data() as Map<String, dynamic>;
-                                final s = (m['status'] ?? '')
-                                    .toString()
-                                    .toLowerCase();
-
-                                final doa = m['date_of_admission'];
-                                if (doa is Timestamp) {
-                                  final ad = doa.toDate();
-                                  final inYear =
-                                      !ad.isBefore(startOfYear) &&
-                                      ad.isBefore(startOfNextYear);
-                                  if (inYear) {
-                                    totalThisYear++;
-                                    admissionsThisYear.add(doa);
-                                    if (s == 'active') activeThisYear++;
-                                  }
-                                }
-
-                                if (s == 'recovered') {
-                                  final ra = m['recovered_at'];
-                                  if (ra is Timestamp) {
-                                    final dt = ra.toDate();
-                                    final inYear =
-                                        !dt.isBefore(startOfYear) &&
-                                        dt.isBefore(startOfNextYear);
-                                    if (inYear) {
-                                      dischargedThisYear++;
-                                      recoveredThisYear.add(ra);
-                                    }
-                                  }
-                                } else if (s == 'deceased') {
-                                  final da = m['deceased_at'];
-                                  if (da is Timestamp) {
-                                    final dt = da.toDate();
-                                    final inYear =
-                                        !dt.isBefore(startOfYear) &&
-                                        dt.isBefore(startOfNextYear);
-                                    if (inYear) {
-                                      deathsThisYear++;
-                                      deathThisYear.add(da);
-                                    }
-                                  }
-                                }
-                              }
-
-                              // 14-day mini charts, using the (year-filtered) events
-                              final allAdmissionsSeries = _bucketPerDay(
-                                admissionsThisYear,
-                                days: 14,
-                              );
-                              final rSeries = _bucketPerDay(
-                                recoveredThisYear,
-                                days: 14,
-                              );
-                              final dSeries = _bucketPerDay(
-                                deathThisYear,
-                                days: 14,
-                              );
-
-                              return Center(
-                                child: Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: _kpiGap,
-                                  runSpacing: _kpiGap,
+                              // compact: stack table then detail panel
+                              if (isCompact) {
+                                return Column(
                                   children: [
-                                    statCardDynamic(
-                                      title: "Total Patients (This Year)",
-                                      value: totalThisYear.toString(),
-                                      series: allAdmissionsSeries,
-                                      color: _primaryDim,
-                                      selected:
-                                          _statusFilter == null &&
-                                          !_filterRecoveredThisMonth,
-                                      onTap: () => setState(() {
-                                        _statusFilter = null;
-                                        _filterRecoveredThisMonth = false;
-                                      }),
-                                      width: _kpiWidth,
-                                      height: _kpiHeight,
+                                    Expanded(
+                                      child: _buildScrollableTable(filtered),
                                     ),
-                                    statCardDynamic(
-                                      title: "Current Patients (This Year)",
-                                      value: activeThisYear.toString(),
-                                      series: allAdmissionsSeries,
-                                      color: const Color(0xFF6EA8FE),
-                                      selected:
-                                          _statusFilter == 'Active' &&
-                                          !_filterRecoveredThisMonth,
-                                      onTap: () => setState(() {
-                                        if (_statusFilter == 'Active' &&
-                                            !_filterRecoveredThisMonth) {
-                                          _statusFilter = null;
-                                        } else {
-                                          _statusFilter = 'Active';
-                                          _filterRecoveredThisMonth = false;
-                                        }
-                                      }),
-                                      width: _kpiWidth,
-                                      height: _kpiHeight,
-                                    ),
-                                    statCardDynamic(
-                                      title: "Discharged (This Year)",
-                                      value: dischargedThisYear.toString(),
-                                      series: rSeries,
-                                      color: const Color(0xFF5FD7C5),
-                                      selected:
-                                          _statusFilter == 'Recovered' &&
-                                          _filterRecoveredThisMonth,
-                                      onTap: () => setState(() {
-                                        if (_statusFilter == 'Recovered' &&
-                                            _filterRecoveredThisMonth) {
-                                          _statusFilter = null;
-                                          _filterRecoveredThisMonth = false;
-                                        } else {
-                                          _statusFilter = 'Recovered';
-                                          _filterRecoveredThisMonth = true;
-                                        }
-                                      }),
-                                      width: _kpiWidth,
-                                      height: _kpiHeight,
-                                    ),
-                                    statCardDynamic(
-                                      title: "Deceased (This Year)",
-                                      value: deathsThisYear.toString(),
-                                      series: dSeries,
-                                      color: const Color(0xFFFF6B6B),
-                                      selected:
-                                          _statusFilter == 'Deceased' &&
-                                          !_filterRecoveredThisMonth,
-                                      onTap: () => setState(() {
-                                        if (_statusFilter == 'Deceased' &&
-                                            !_filterRecoveredThisMonth) {
-                                          _statusFilter = null;
-                                        } else {
-                                          _statusFilter = 'Deceased';
-                                          _filterRecoveredThisMonth = false;
-                                        }
-                                      }),
-                                      width: _kpiWidth,
-                                      height: _kpiHeight,
+                                    const SizedBox(height: 12),
+                                    // detail panel full width
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: buildPatientForm(),
                                     ),
                                   ],
-                                ),
+                                );
+                              }
+
+                              // wide: side-by-side
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildScrollableTable(filtered),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  SizedBox(
+                                    width: 380,
+                                    child: buildPatientForm(),
+                                  ),
+                                ],
                               );
                             },
                           ),
-
-                        const SizedBox(height: 14),
-
-                        // ===== Table + side form =====
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _uid == null
-                                    ? const Center(
-                                        child: Text(
-                                          'Please sign in to view your hospital’s cases',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      )
-                                    : StreamBuilder<QuerySnapshot>(
-                                        stream: _hospitalCasesQuery(_uid!)
-                                            .orderBy(
-                                              'date_of_admission',
-                                              descending: true,
-                                            )
-                                            .snapshots(),
-                                        builder: (context, snapshot) {
-                                          if (snapshot.hasError) {
-                                            return Padding(
-                                              padding: const EdgeInsets.all(16),
-                                              child: Text(
-                                                'Error: ${snapshot.error}',
-                                                style: const TextStyle(
-                                                  color: Colors.redAccent,
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                          if (!snapshot.hasData) {
-                                            return const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            );
-                                          }
-
-                                          final all = snapshot.data!.docs;
-                                          final filtered = _applyFilters(all);
-
-                                          return Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  ElevatedButton.icon(
-                                                    onPressed: () =>
-                                                        _exportCsv(all),
-                                                    icon: const Icon(
-                                                      Icons.download,
-                                                      color: Colors.white,
-                                                    ),
-                                                    label: const Text(
-                                                      'Export CSV',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: _primary,
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 10,
-                                                            horizontal: 14,
-                                                          ),
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              10,
-                                                            ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  if (_hasAnyFilterActive)
-                                                    OutlinedButton.icon(
-                                                      onPressed: () => setState(
-                                                        () {
-                                                          _statusFilter = null;
-                                                          _filterRecoveredThisMonth =
-                                                              false;
-                                                          _searchQuery = '';
-                                                        },
-                                                      ),
-                                                      icon: const Icon(
-                                                        Icons.filter_alt_off,
-                                                        color: Colors.white70,
-                                                      ),
-                                                      label: const Text(
-                                                        'Clear filters',
-                                                        style: TextStyle(
-                                                          color: Colors.white70,
-                                                        ),
-                                                      ),
-                                                      style: OutlinedButton.styleFrom(
-                                                        side: BorderSide(
-                                                          color: _ink
-                                                              .withOpacity(.4),
-                                                        ),
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              vertical: 10,
-                                                              horizontal: 14,
-                                                            ),
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                10,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  const Spacer(),
-                                                  Tooltip(
-                                                    message: _denseTable
-                                                        ? 'Comfort density'
-                                                        : 'Compact density',
-                                                    child: IconButton(
-                                                      onPressed: () => setState(
-                                                        () => _denseTable =
-                                                            !_denseTable,
-                                                      ),
-                                                      icon: Icon(
-                                                        _denseTable
-                                                            ? Icons.view_comfy
-                                                            : Icons.table_rows,
-                                                      ),
-                                                      color: Colors.white70,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 10),
-                                              Expanded(
-                                                child: _buildPatientTableBody(
-                                                  filtered,
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        },
-                                      ),
-                              ),
-                              const SizedBox(width: 16),
-                              SizedBox(width: 380, child: buildPatientForm()),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        );
+
+        final page = Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: _bg,
+          appBar: appBar,
+          drawer: isCompact ? Drawer(child: _buildSidebar()) : null,
+          body: isCompact
+              ? content
+              : Row(
+                  children: [
+                    _buildSidebar(),
+                    Expanded(child: content),
+                  ],
+                ),
+        );
+
+        return DefaultTextStyle(
+          style: const TextStyle(fontFamily: 'Poppins'),
+          child: page,
+        );
+      },
+    );
+  }
+
+  // ===== Sidebar =====
+  Widget _buildSidebar() {
+    return Container(
+      width: 250,
+      color: sidebar,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: purple.withOpacity(.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.coronavirus, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Patient management',
+                    style: TextStyle(
+                      color: text,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          _SideNavItem(
+            icon: Icons.dashboard_outlined,
+            label: 'Patient Form',
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => const PatientFormPage(),
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
+                ),
+              );
+            },
+          ),
+          const _SideNavItem(
+            icon: Icons.receipt_long_outlined,
+            label: 'Patient Management',
+            active: true,
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  backgroundImage: AssetImage('images/pfp.png'),
+                  radius: 16,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    username,
+                    style: const TextStyle(color: subtext, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  color: _panelAlt,
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: Colors.white54,
+                    size: 18,
+                  ),
+                  onSelected: (value) async {
+                    if (value == 'signout') {
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: _panelAlt,
+                          title: const Text(
+                            'Sign out',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          content: const Text(
+                            'Are you sure you want to sign out?',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _primary,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Sign out'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (ok == true) {
+                        await FirebaseAuth.instance.signOut();
+                        if (!mounted) return;
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const SignInPage()),
+                          (route) => false,
+                        );
+                      }
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'signout',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.logout, color: Colors.white70, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Sign out',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  // ===== Table (now only kept columns) with horizontal scroll on small widths =====
+  Widget _buildScrollableTable(List<QueryDocumentSnapshot> docs) {
+    final table = _buildPatientTableBody(docs);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: LayoutBuilder(
+        builder: (_, c) {
+          // if too narrow, allow horizontal scroll
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: c.maxWidth < 900 ? 900 : c.maxWidth,
+              child: table,
+            ),
+          );
+        },
       ),
     );
   }
@@ -1154,6 +978,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Container(
             padding: EdgeInsets.symmetric(vertical: vPad, horizontal: 12),
             decoration: const BoxDecoration(
@@ -1164,16 +989,16 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
               children: [
                 Expanded(flex: 1, child: _Hdr(' # ')),
                 Expanded(flex: 3, child: _Hdr('Name')),
-                Expanded(flex: 2, child: _Hdr('Gender')),
                 Expanded(flex: 1, child: _Hdr('Age')),
                 Expanded(flex: 3, child: _Hdr('Admission Date')),
                 Expanded(flex: 2, child: _Hdr('Status')),
                 Expanded(flex: 2, child: _Hdr('MOH Area')),
                 Expanded(flex: 2, child: _Hdr('PHI Area')),
-                Expanded(flex: 3, child: _Hdr('Address')),
+                Expanded(flex: 4, child: _Hdr('Address')),
               ],
             ),
           ),
+          // Body
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
@@ -1229,13 +1054,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                             ),
                           ),
                           Expanded(
-                            flex: 2,
-                            child: Text(
-                              (data['gender'] ?? '').toString(),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                          Expanded(
                             flex: 1,
                             child: Text(
                               '$age',
@@ -1282,10 +1100,11 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                             ),
                           ),
                           Expanded(
-                            flex: 3,
+                            flex: 4,
                             child: Text(
                               (data['address'] ?? '').toString(),
                               style: const TextStyle(color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -1296,14 +1115,81 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
               ),
             ),
           ),
+          // footer controls (density + export)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final allDocs = await _hospitalCasesQuery(_uid!).get();
+                    await _exportCsv(allDocs.docs);
+                  },
+                  icon: const Icon(Icons.download, color: Colors.white),
+                  label: const Text(
+                    'Export CSV',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                if (_hasAnyFilterActive)
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() {
+                      _statusFilter = null;
+                      _filterRecoveredThisMonth = false;
+                      _searchQuery = '';
+                    }),
+                    icon: const Icon(
+                      Icons.filter_alt_off,
+                      color: Colors.white70,
+                    ),
+                    label: const Text(
+                      'Clear filters',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: _ink.withOpacity(.4)),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                Tooltip(
+                  message: _denseTable ? 'Comfort density' : 'Compact density',
+                  child: IconButton(
+                    onPressed: () => setState(() => _denseTable = !_denseTable),
+                    icon: Icon(
+                      _denseTable ? Icons.view_comfy : Icons.table_rows,
+                    ),
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // ===== RIGHT PANEL =====
+  // ===== RIGHT PANEL (only kept fields) =====
   Widget buildPatientForm() {
-    final panel = Container(
+    return Container(
       decoration: BoxDecoration(
         color: _panel,
         borderRadius: BorderRadius.circular(12),
@@ -1343,7 +1229,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  const Text('Personal Information', style: sectionTitleStyle),
+                  const Text('Basic', style: sectionTitleStyle),
                   const SizedBox(height: 8),
                   buildTextField(
                     nameController,
@@ -1351,48 +1237,34 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     icon: Icons.person,
                   ),
 
-                  // ✅ Gender as dropdown
-                  buildDropdown(
-                    'Gender',
-                    genderController.text.isEmpty
-                        ? null
-                        : genderController.text,
-                    const ['Male', 'Female', 'Other'],
-                    (val) {
-                      genderController.text = val ?? '';
-                      setState(() {});
-                    },
-                  ),
-
                   const SizedBox(height: 8),
-                  const Text('Guardian Information', style: sectionTitleStyle),
+                  const Text('Contacts & Location', style: sectionTitleStyle),
                   const SizedBox(height: 8),
-                  buildTextField(
-                    guardianNameController,
-                    'Guardian Name',
-                    icon: Icons.person_outline,
-                  ),
                   buildTextField(
                     guardianContactController,
                     'Guardian Contact',
                     icon: Icons.phone_android,
                   ),
-
-                  const SizedBox(height: 8),
-                  const Text('Contact Information', style: sectionTitleStyle),
-                  const SizedBox(height: 8),
                   buildTextField(
                     phoneController,
                     'Phone Number',
                     icon: Icons.phone,
                   ),
-                  buildTextField(emailController, 'Email', icon: Icons.email),
+                  buildTextField(
+                    addressController,
+                    'Home Address',
+                    icon: Icons.home,
+                  ),
+                  buildTextField(
+                    schoolWorkController,
+                    'School/Work Address',
+                    icon: Icons.school,
+                  ),
 
                   const SizedBox(height: 8),
-                  const Text('Hospital Information', style: sectionTitleStyle),
+                  const Text('Public Health Areas', style: sectionTitleStyle),
                   const SizedBox(height: 8),
 
-                  // 👇 MOH → PHI picker (asset fallback)
                   MohPhiPickerInline(
                     initialMoh: mohAreaController.text,
                     initialPhi: phiAreaController.text,
@@ -1401,67 +1273,22 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                       phiAreaController.text = phi ?? '';
                       setState(() {});
                     },
+                    phiRequired: true,
                   ),
-
-                  buildTextField(
-                    addressController,
-                    'Address',
-                    icon: Icons.home,
-                  ),
-                  buildTextField(
-                    wardNoController,
-                    'Ward No',
-                    icon: Icons.meeting_room,
-                  ),
-                  buildTextField(
-                    bedNoController,
-                    'Bed No',
-                    icon: Icons.bed_outlined,
-                  ),
-
-                  const SizedBox(height: 8),
-                  const Text('Medical Information', style: sectionTitleStyle),
-                  const SizedBox(height: 8),
-                  buildTextField(
-                    medicineController,
-                    'Medicine',
-                    icon: Icons.medical_services,
-                  ),
-                  buildTextField(
-                    schoolWorkController,
-                    'School/Work',
-                    icon: Icons.school,
-                  ),
-                  buildTextField(
-                    remarkController,
-                    'Remarks',
-                    icon: Icons.notes,
-                  ),
-
-                  const SizedBox(height: 8),
-                  const Text('Status & Type', style: sectionTitleStyle),
-                  const SizedBox(height: 8),
-
-                  if (status != null && status!.isNotEmpty)
-                    Chip(
-                      label: Text(
-                        status!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: getStatusColor(status!),
-                    ),
-                  const SizedBox(height: 8),
-                  buildDropdown('Status', status, [
-                    'Active',
-                    'Recovered',
-                    'Deceased',
-                  ], (val) => setState(() => status = val)),
-                  buildDropdown('Type', type, [
-                    'New',
-                    'Transferred',
-                  ], (val) => setState(() => type = val)),
 
                   const SizedBox(height: 14),
+                  if (status != null && status!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Chip(
+                        label: Text(
+                          status!,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        backgroundColor: getStatusColor(status!),
+                      ),
+                    ),
+
                   ElevatedButton.icon(
                     icon: _saving
                         ? const SizedBox(
@@ -1495,7 +1322,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
               ),
             ),
     );
-    return panel;
   }
 
   Widget _emptyPanel() {
@@ -1573,40 +1399,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
             borderSide: BorderSide(color: _ink.withOpacity(.35)),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget buildDropdown(
-    String label,
-    String? value,
-    List<String> items,
-    void Function(String?) onChanged,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        value: (value == null || value.isEmpty) ? null : value,
-        dropdownColor: _panelAlt,
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: Colors.white70),
-          filled: true,
-          fillColor: _panelAlt,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: _ink.withOpacity(.35)),
-          ),
-        ),
-        items: items
-            .map(
-              (e) => DropdownMenuItem(
-                value: e,
-                child: Text(e, style: const TextStyle(color: Colors.white)),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
       ),
     );
   }
@@ -1850,7 +1642,7 @@ class ListToCsvConverter {
   }
 }
 
-/// =================== MOH → PHI picker with Firestore *or* asset fallback ===================
+/// =================== MOH → PHI picker (asset) ===================
 class MohPhiPickerInline extends StatefulWidget {
   final String? initialMoh;
   final String? initialPhi;
@@ -1874,7 +1666,7 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
   final _phiKey = GlobalKey<FormFieldState<String>>();
 
   bool _loading = true;
-  String? _error; // show what went wrong
+  String? _error;
 
   Map<String, List<String>> _map = {};
   List<String> _mohList = [];
@@ -1893,7 +1685,6 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
 
   Future<void> _load() async {
     try {
-      // Asset-only for now (no Firestore dependency)
       final jsonStr = await rootBundle.loadString('images/phi_area.json');
       final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
 
@@ -1918,7 +1709,6 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
         _error = null;
       });
 
-      // initial selection
       if (widget.initialMoh != null && widget.initialMoh!.trim().isNotEmpty) {
         _onMohChanged(
           _titleCase(widget.initialMoh!),
@@ -1931,7 +1721,7 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Couldn\'t load refassets/phi_area.json: $e';
+        _error = 'Couldn\'t load images/phi_area.json: $e';
       });
     }
   }

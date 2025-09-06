@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
+import 'package:buzzoffwebnew/MOH/map.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter/material.dart';
@@ -9,8 +10,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:buzzoffwebnew/MOH/complaints.dart';
-import 'package:buzzoffwebnew/MOH/MapPage.dart';
+import 'complaints.dart';
+import 'map.dart';
+
 import 'package:buzzoffwebnew/signin.dart';
 
 class AnalyticsPage extends StatefulWidget {
@@ -489,6 +491,20 @@ class _Sidebar extends StatelessWidget {
                 context,
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => const ComplaintsPage(),
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
+                ),
+              );
+            },
+          ),
+          _SideNavItem(
+            icon: Icons.map_outlined,
+            label: 'Map',
+            onTap: () {
+              Navigator.pushReplacement(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => const MapPage(),
                   transitionDuration: Duration.zero,
                   reverseTransitionDuration: Duration.zero,
                 ),
