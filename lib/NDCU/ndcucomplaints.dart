@@ -3,9 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'ndcuanalytic.dart';
+<<<<<<< HEAD
 import 'mapnd.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:url_launcher/url_launcher.dart';
+=======
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
 class ComplaintsPage extends StatefulWidget {
   const ComplaintsPage({super.key});
@@ -45,6 +49,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     return null;
   }
 
+<<<<<<< HEAD
   double? _readNum(Map<String, dynamic> m, String key) {
     final v = m[key];
     if (v is num) return v.toDouble();
@@ -55,6 +60,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     return null;
   }
 
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Future<void> fetchUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -88,11 +95,16 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     });
   }
 
+<<<<<<< HEAD
   // NDCU scope: all complaints
+=======
+  // NDCU: see everything (no MOH scoping)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Query complaintsBase() {
     return FirebaseFirestore.instance.collection('complaints');
   }
 
+<<<<<<< HEAD
   // ===== Helpers for directions =====
   // Build a Google Maps directions URL using the best available destination field.
   String? _buildDirectionsUrl(Map<String, dynamic> data) {
@@ -149,6 +161,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     }
   }
 
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   // ===== UI =====
   @override
   Widget build(BuildContext context) {
@@ -231,6 +245,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                   active: true,
                   onTap: null,
                 ),
+<<<<<<< HEAD
                 _SideNavItem(
                   icon: Icons.map_outlined,
                   label: 'Map',
@@ -245,6 +260,9 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                     );
                   },
                 ),
+=======
+                // (No Maps entry here unless you still want it for NDCU)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -348,7 +366,37 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                   ),
                   const SizedBox(height: 16),
 
+<<<<<<< HEAD
                   // ===== CARDS GRID =====
+=======
+                  // ===== TABLE HEADER =====
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: panel,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: border),
+                    ),
+                    child: Row(
+                      children: [
+                        _th('#', flex: 1),
+                        _th('Name', flex: 3),
+                        _th('Description', flex: 2),
+                        _th('Image', flex: 2),
+                        _th('Map Link', flex: 2),
+                        _th('Date', flex: 2),
+                        _th('Time', flex: 2),
+                        _th('Status', flex: 3),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ===== TABLE BODY =====
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -378,6 +426,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                 }
 
                                 final docs = snapshot.data!.docs;
+<<<<<<< HEAD
                                 // Responsive columns
                                 final width = MediaQuery.of(context).size.width;
                                 int crossAxisCount = 3;
@@ -396,6 +445,14 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                         childAspectRatio: 1.8,
                                       ),
                                   itemCount: docs.length,
+=======
+                                return ListView.separated(
+                                  itemCount: docs.length,
+                                  separatorBuilder: (_, __) => Divider(
+                                    color: border.withOpacity(.6),
+                                    height: 1,
+                                  ),
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                   itemBuilder: (context, index) {
                                     final doc = docs[index];
                                     final data =
@@ -413,12 +470,21 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                         _readStr(data, 'imageUrl') ??
                                         _readStr(data, 'image_url') ??
                                         _readStr(data, 'image');
+<<<<<<< HEAD
+=======
+                                    final mapUrl =
+                                        _readStr(data, 'mapUrl') ??
+                                        _readStr(data, 'map_link') ??
+                                        _readStr(data, 'maplink') ??
+                                        _readStr(data, 'location_url');
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                     final ts = data['timestamp'] is Timestamp
                                         ? data['timestamp'] as Timestamp
                                         : null;
                                     final initialStatus =
                                         _readStr(data, 'status') ?? 'Pending';
 
+<<<<<<< HEAD
                                     final directionsUrl = _buildDirectionsUrl(
                                       data,
                                     );
@@ -427,10 +493,18 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                         userId == null ||
                                         userId.isEmpty) {
                                       return _ComplaintCard(
+=======
+                                    if (isAnonymous ||
+                                        userId == null ||
+                                        userId.isEmpty) {
+                                      return _complaintRow(
+                                        index: index,
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                         name: 'Anonymous',
                                         location: location,
                                         description: description,
                                         imageUrl: imageUrl,
+<<<<<<< HEAD
                                         timestamp: ts,
                                         docId: doc.id,
                                         initialStatus: initialStatus,
@@ -440,6 +514,12 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                             : () => _openExternalUrl(
                                                 directionsUrl,
                                               ),
+=======
+                                        mapUrl: mapUrl,
+                                        timestamp: ts,
+                                        docId: doc.id,
+                                        initialStatus: initialStatus,
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                       );
                                     } else {
                                       return FutureBuilder<DocumentSnapshot>(
@@ -465,11 +545,17 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                                 ) ??
                                                 'Unknown User';
                                           }
+<<<<<<< HEAD
                                           return _ComplaintCard(
+=======
+                                          return _complaintRow(
+                                            index: index,
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                             name: displayName,
                                             location: location,
                                             description: description,
                                             imageUrl: imageUrl,
+<<<<<<< HEAD
                                             timestamp: ts,
                                             docId: doc.id,
                                             initialStatus: initialStatus,
@@ -480,6 +566,12 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                                 : () => _openExternalUrl(
                                                     directionsUrl,
                                                   ),
+=======
+                                            mapUrl: mapUrl,
+                                            timestamp: ts,
+                                            docId: doc.id,
+                                            initialStatus: initialStatus,
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                           );
                                         },
                                       );
@@ -490,6 +582,56 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                             ),
                     ),
                   ),
+<<<<<<< HEAD
+=======
+
+                  const SizedBox(height: 12),
+
+                  // footer (static for now)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '1-10 of 97',
+                        style: TextStyle(color: subtext, fontSize: 12),
+                      ),
+                      Row(
+                        children: [
+                          const Text(
+                            'Rows per page: 10',
+                            style: TextStyle(color: subtext, fontSize: 12),
+                          ),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white54,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 16),
+                          const Text(
+                            '1/10',
+                            style: TextStyle(color: subtext, fontSize: 12),
+                          ),
+                          IconButton(
+                            onPressed: () {},
+                            icon: const Icon(
+                              Icons.chevron_left,
+                              color: Colors.white54,
+                              size: 18,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {},
+                            icon: const Icon(
+                              Icons.chevron_right,
+                              color: Colors.white54,
+                              size: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                 ],
               ),
             ),
@@ -498,6 +640,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
       ),
     );
   }
+<<<<<<< HEAD
 }
 
 // ===== CARD WIDGET (VIEW-ONLY STATUS) =====
@@ -545,10 +688,40 @@ class _ComplaintCard extends StatelessWidget {
     const Color subtext = _ComplaintsPageState.subtext;
     const Color purple = _ComplaintsPageState.purple;
 
+=======
+
+  // ===== TABLE HELPERS =====
+  Widget _th(String label, {required int flex}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: text,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Widget _complaintRow({
+    required int index,
+    required String name,
+    required String? location,
+    required String? description,
+    required String? imageUrl,
+    required String? mapUrl,
+    required Timestamp? timestamp,
+    required String docId,
+    required String initialStatus,
+  }) {
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final dt = timestamp?.toDate() ?? DateTime.now();
     final dateStr = '${dt.day}/${dt.month}/${dt.year}';
     final timeStr = DateFormat('hh:mm a').format(dt);
 
+<<<<<<< HEAD
     return Container(
       decoration: BoxDecoration(
         color: panel,
@@ -756,10 +929,185 @@ class _ComplaintCard extends StatelessWidget {
           ),
         ],
       ),
+=======
+    String selectedStatus = initialStatus;
+
+    Color statusColor(String status) {
+      switch (status) {
+        case 'Pending':
+          return const Color(0xFFFFB020);
+        case 'Under Investigation':
+          return const Color(0xFFFF5C5C);
+        case 'Reviewed':
+          return const Color(0xFF3DDC97);
+        default:
+          return Colors.white;
+      }
+    }
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 1,
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: false,
+                      onChanged: (v) {},
+                      side: const BorderSide(color: border),
+                      checkColor: Colors.black,
+                      activeColor: purple,
+                    ),
+                    Text('${index + 1}', style: const TextStyle(color: text)),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      location ?? 'No Location',
+                      style: const TextStyle(color: subtext, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  description ?? 'No Description',
+                  style: const TextStyle(color: text),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+              SizedBox(
+                width: 120,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 50.0),
+                  child: _ImageThumb(url: imageUrl),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: InkWell(
+                  onTap: (mapUrl != null && mapUrl.isNotEmpty)
+                      ? () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              backgroundColor: panel,
+                              title: const Text(
+                                'Map Link',
+                                style: TextStyle(color: text),
+                              ),
+                              content: SelectableText(
+                                mapUrl!,
+                                style: const TextStyle(color: subtext),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                      : null,
+                  child: Text(
+                    (mapUrl != null && mapUrl!.isNotEmpty)
+                        ? 'Open'
+                        : 'Map Link',
+                    style: const TextStyle(
+                      color: purple,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(dateStr, style: const TextStyle(color: text)),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(timeStr, style: const TextStyle(color: text)),
+              ),
+              Expanded(
+                flex: 3,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: border.withOpacity(.25),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: border),
+                  ),
+                  child: DropdownButton<String>(
+                    value: selectedStatus,
+                    isExpanded: true,
+                    dropdownColor: panel,
+                    underline: const SizedBox(),
+                    iconEnabledColor: text,
+                    style: TextStyle(
+                      color: statusColor(selectedStatus),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Pending',
+                        child: Text('Pending'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Under Investigation',
+                        child: Text('Under Investigation'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Reviewed',
+                        child: Text('Reviewed'),
+                      ),
+                    ],
+                    onChanged: (v) async {
+                      if (v == null) return;
+                      setState(() => selectedStatus = v);
+                      try {
+                        await FirebaseFirestore.instance
+                            .collection('complaints')
+                            .doc(docId)
+                            .update({'status': v});
+                      } catch (_) {}
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     );
   }
 }
 
+<<<<<<< HEAD
+=======
+// ===== WIDGETS =====
+
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 class _SideNavItem extends StatelessWidget {
   const _SideNavItem({
     required this.icon,
@@ -931,6 +1279,7 @@ class _ImageThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+<<<<<<< HEAD
     const double h = 120;
     const double w = 120;
 
@@ -945,6 +1294,15 @@ class _ImageThumb extends StatelessWidget {
             style: TextStyle(color: _ComplaintsPageState.subtext),
           ),
         ),
+=======
+    const double h = 48;
+    const double w = 72;
+
+    if (url == null || url!.isEmpty) {
+      return const Text(
+        'No Image',
+        style: TextStyle(color: _ComplaintsPageState.subtext),
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       );
     }
 
@@ -967,6 +1325,7 @@ class _ImageThumb extends StatelessWidget {
 
         final resolved = snap.data;
         if (resolved == null || resolved.isEmpty) {
+<<<<<<< HEAD
           return Container(
             height: h,
             width: w,
@@ -985,6 +1344,20 @@ class _ImageThumb extends StatelessWidget {
                 ],
               ),
             ),
+=======
+          return Row(
+            children: const [
+              Icon(Icons.broken_image, color: Colors.white54, size: 18),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'Load failed',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ),
+            ],
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
           );
         }
 
@@ -1024,6 +1397,7 @@ class _ImageThumb extends StatelessWidget {
               ),
             );
           },
+<<<<<<< HEAD
           child: Image.network(
             resolved,
             height: h,
@@ -1037,6 +1411,24 @@ class _ImageThumb extends StatelessWidget {
                 Icons.broken_image,
                 color: Colors.white54,
                 size: 18,
+=======
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              resolved,
+              height: h,
+              width: w,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                height: h,
+                width: w,
+                color: const Color(0xFF232938),
+                child: const Icon(
+                  Icons.broken_image,
+                  color: Colors.white54,
+                  size: 18,
+                ),
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
               ),
             ),
           ),

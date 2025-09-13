@@ -12,21 +12,37 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
+<<<<<<< HEAD
 import 'dart:html' as dom show document, window; // web: meta key + geolocation
+=======
+import 'dart:html' as dom show document; // web meta-key
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
 import 'analytics.dart';
 import 'complaints.dart';
 
+<<<<<<< HEAD
 /// ----- MODEL -----
+=======
+/// Map point (now sourced from `moh_actions`)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 class _CasePoint {
   const _CasePoint({
     required this.id,
     required this.pos,
+<<<<<<< HEAD
     required this.ageDays,
     required this.locationType,
     required this.locationAddress,
     required this.reviewStatus,
     required this.reviewAt,
+=======
+    required this.ageDays, // days since admission (fallback: since action)
+    required this.locationType, // 'home' | 'work' | 'school'
+    required this.locationAddress, // plain address string
+    required this.reviewStatus, // 'no_signs' | 'cleaned'
+    required this.reviewAt, // action timestamp
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   });
 
   final String id;
@@ -59,9 +75,14 @@ class _ZoneStyle {
   });
 }
 
+<<<<<<< HEAD
 /// ----- STATE -----
 class _MapPageState extends State<MapPage> {
   // Theme
+=======
+class _MapPageState extends State<MapPage> {
+  // ===== THEME =====
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   static const Color bg = Color(0xFF0F1115);
   static const Color sidebar = Color(0xFF14161B);
   static const Color panel = Color(0xFF171A21);
@@ -74,6 +95,7 @@ class _MapPageState extends State<MapPage> {
   static const Color amber = Color(0xFFFFC107);
   static const Color red = Color(0xFFFF3B30);
 
+<<<<<<< HEAD
   // Map
   final Completer<GoogleMapController> _mapCtl = Completer();
   final Set<Circle> _circles = {};
@@ -88,20 +110,37 @@ class _MapPageState extends State<MapPage> {
     northeast: const LatLng(10.1, 82.1),
   );
 
+=======
+  // ===== MAP =====
+  final Completer<GoogleMapController> _mapCtl = Completer();
+  final Set<Circle> _circles = {};
+  final Set<Marker> _markers = {};
+  LatLng _mapCenter = const LatLng(6.9271, 79.8612);
+  double _mapZoom = 11;
+
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   bool _loading = true;
   String _statusMsg = 'Loading…';
   String? _currentMohArea;
 
+<<<<<<< HEAD
   // UI panel toggle
   bool _showMohPanel = true;
 
   // Caches
+=======
+  // panel toggle
+  bool _showMohPanel = true;
+
+  // caches
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   final Map<String, BitmapDescriptor> _markerIconCache = {};
   final Map<String, LatLng> _geoCache = {};
 
   // cluster radius
   static const double clusterRadiusM = 300.0;
 
+<<<<<<< HEAD
   // Directions UI/state
   final TextEditingController _fromCtl = TextEditingController();
   final TextEditingController _toCtl = TextEditingController();
@@ -113,6 +152,9 @@ class _MapPageState extends State<MapPage> {
   bool _gettingMyLoc = false;
 
   // Browser key from <meta name="gmaps-key" content="...">
+=======
+  // Read Browser key from <meta name="gmaps-key" content="...">
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   String get _apiKey {
     final el = dom.document.querySelector('meta[name="gmaps-key"]');
     return el?.getAttribute('content') ?? '';
@@ -124,6 +166,7 @@ class _MapPageState extends State<MapPage> {
     _boot();
   }
 
+<<<<<<< HEAD
   @override
   void dispose() {
     _fromCtl.dispose();
@@ -131,6 +174,8 @@ class _MapPageState extends State<MapPage> {
     super.dispose();
   }
 
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Future<void> _boot() async {
     setState(() {
       _loading = true;
@@ -160,10 +205,19 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+<<<<<<< HEAD
   /// ---------- Geocoding (enabled for ALL platforms via REST) ----------
   Future<LatLng?> _geocodeAddress(String address) async {
     final key = address.trim().toLowerCase();
     if (_geoCache.containsKey(key)) return _geoCache[key];
+=======
+  // ---- Geocoding (web REST) with session cache ----
+  Future<LatLng?> _geocodeAddress(String address) async {
+    final key = address.trim().toLowerCase();
+    if (_geoCache.containsKey(key)) return _geoCache[key];
+
+    if (!kIsWeb) return null;
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     if (_apiKey.isEmpty) return null;
 
     final uri = Uri.https('maps.googleapis.com', '/maps/api/geocode/json', {
@@ -190,9 +244,15 @@ class _MapPageState extends State<MapPage> {
     return null;
   }
 
+<<<<<<< HEAD
   // Haversine
   double _metersBetween(LatLng a, LatLng b) {
     const double R = 6371000.0;
+=======
+  // ---- Distance helper (Haversine) ----
+  double _metersBetween(LatLng a, LatLng b) {
+    const double R = 6371000.0; // meters
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final dLat = _degToRad(b.latitude - a.latitude);
     final dLon = _degToRad(b.longitude - a.longitude);
     final lat1 = _degToRad(a.latitude);
@@ -208,17 +268,31 @@ class _MapPageState extends State<MapPage> {
   double _degToRad(double d) => d * math.pi / 180.0;
   String _normAddr(String a) => a.trim().toLowerCase();
 
+<<<<<<< HEAD
   /// ---------- Load data and draw circles/markers ----------
+=======
+  // ==============================
+  //    Drive map from moh_actions
+  // ==============================
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Future<void> _loadCasesAndDraw() async {
     setState(() {
       _loading = true;
       _statusMsg = 'Loading MOH actions…';
       _circles.clear();
       _markers.clear();
+<<<<<<< HEAD
       _markerIconCache.clear();
     });
 
     try {
+=======
+      _markerIconCache.clear(); // ensure resized icons regenerate
+    });
+
+    try {
+      // 1) Fetch moh_actions for this area and recent window
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(
         'moh_actions',
       );
@@ -227,6 +301,10 @@ class _MapPageState extends State<MapPage> {
         q = q.where('patient_moh_area', isEqualTo: _currentMohArea);
       }
 
+<<<<<<< HEAD
+=======
+      // cover yellow(3w)+green(1w) windows
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final since = DateTime.now().subtract(const Duration(days: 60));
       q = q.where(
         'created_at',
@@ -237,12 +315,21 @@ class _MapPageState extends State<MapPage> {
       if (qs.docs.isEmpty) {
         setState(() {
           _loading = false;
+<<<<<<< HEAD
           _statusMsg = 'No actions for ${_currentMohArea ?? "all areas"}';
+=======
+          _statusMsg =
+              'No review actions for ${_currentMohArea ?? "all areas"}';
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
         });
         return;
       }
 
+<<<<<<< HEAD
       // latest per address
+=======
+      // 2) Keep only the latest action per *address string*
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final latestByAddr =
           <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
 
@@ -252,8 +339,12 @@ class _MapPageState extends State<MapPage> {
         if (addr.isEmpty) continue;
 
         final action = (m['action'] ?? '').toString().toLowerCase();
+<<<<<<< HEAD
         const allowed = {'no_signs', 'cleaned', 'new_case'};
         if (!allowed.contains(action)) continue;
+=======
+        if (action != 'no_signs' && action != 'cleaned') continue;
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
         final key = _normAddr(addr);
 
@@ -278,7 +369,11 @@ class _MapPageState extends State<MapPage> {
         }
       }
 
+<<<<<<< HEAD
       // Build points
+=======
+      // 3) Build points (geocode on the fly; no writes)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final points = <_CasePoint>[];
 
       for (final entry in latestByAddr.entries) {
@@ -287,6 +382,10 @@ class _MapPageState extends State<MapPage> {
         final locType = (m['location_type'] ?? 'home').toString();
         final action = (m['action'] ?? 'no_signs').toString().toLowerCase();
 
+<<<<<<< HEAD
+=======
+        // admission date for day badge; fallback to action time
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
         DateTime? admit;
         final ad = m['date_of_admission'];
         if (ad is Timestamp) admit = ad.toDate();
@@ -333,7 +432,11 @@ class _MapPageState extends State<MapPage> {
         return;
       }
 
+<<<<<<< HEAD
       // clusters
+=======
+      // 4) Detect clusters (≥2 within 300 m)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final clusterIds = <String>{};
       final neighborCount = <String, int>{};
       for (int i = 0; i < points.length; i++) {
@@ -350,7 +453,11 @@ class _MapPageState extends State<MapPage> {
         }
       }
 
+<<<<<<< HEAD
       // draw
+=======
+      // 5) Draw (ONLY 300 m ring)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final circles = <Circle>{};
       final markers = <Marker>{};
       LatLngBounds? bounds;
@@ -364,6 +471,10 @@ class _MapPageState extends State<MapPage> {
         );
         if (!style.visible) continue;
 
+<<<<<<< HEAD
+=======
+        // Ring: 0–300m ONLY
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
         circles.add(
           Circle(
             circleId: CircleId('${p.id}_300'),
@@ -375,6 +486,10 @@ class _MapPageState extends State<MapPage> {
           ),
         );
 
+<<<<<<< HEAD
+=======
+        // Marker (very small; constant pixel size)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
         final int nbh = (neighborCount[p.id] ?? 0) + 1;
         final BitmapDescriptor icon = isCluster
             ? await _clusterPin(nbh: nbh)
@@ -425,11 +540,18 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Style from action-only timeline
+  // - 'no_signs' → YELLOW 3w → GREEN 1w → disappear
+  // - 'cleaned'  → GREEN 1w → disappear
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   _ZoneStyle _styleFromAction({
     required String reviewStatus,
     required DateTime reviewAt,
   }) {
     final d = DateTime.now().difference(reviewAt).inDays.clamp(0, 9999);
+<<<<<<< HEAD
     if (reviewStatus == 'new_case') {
       if (d <= 60) {
         return const _ZoneStyle(
@@ -451,6 +573,9 @@ class _MapPageState extends State<MapPage> {
         );
       }
     }
+=======
+
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     if (reviewStatus == 'cleaned') {
       if (d <= 7) {
         return const _ZoneStyle(
@@ -472,6 +597,10 @@ class _MapPageState extends State<MapPage> {
         );
       }
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     if (reviewStatus == 'no_signs') {
       if (d <= 21) {
         return const _ZoneStyle(
@@ -502,6 +631,11 @@ class _MapPageState extends State<MapPage> {
         );
       }
     }
+<<<<<<< HEAD
+=======
+
+    // Fallback (shouldn't hit)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     return const _ZoneStyle(
       innerFill: Color(0x00000000),
       innerStroke: Color(0x00000000),
@@ -512,12 +646,22 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+<<<<<<< HEAD
   /// ----- Custom pins -----
+=======
+  // ---- Custom pins (very small; constant logical size; 2× backing) ----
+
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Future<BitmapDescriptor> _mosquitoPinWithDays({
     required int days,
     required Color baseColor,
   }) async {
+<<<<<<< HEAD
     const double s = 0.35;
+=======
+    // shrink all geometry with a single scalar
+    const double s = 0.35; // tweak 0.25–0.45 as you like
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final key = 'mosq2x_s${s}_$days${baseColor.value.toRadixString(16)}';
     final cached = _markerIconCache[key];
     if (cached != null) return cached;
@@ -530,6 +674,10 @@ class _MapPageState extends State<MapPage> {
     final canvas = ui.Canvas(recorder);
     final paint = Paint()..color = baseColor;
 
+<<<<<<< HEAD
+=======
+    // pin shape (circle + tail), scaled
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final cx = size / 2.0;
     final cy = size / 2.0 - 16 * s * scale / 2.0;
 
@@ -542,9 +690,17 @@ class _MapPageState extends State<MapPage> {
       ..close();
     canvas.drawPath(tail, paint);
 
+<<<<<<< HEAD
     final inner = Paint()..color = Colors.black.withOpacity(0.75);
     canvas.drawCircle(Offset(cx, cy), 16 * s * scale, inner);
 
+=======
+    // inner dark disc
+    final inner = Paint()..color = Colors.black.withOpacity(0.75);
+    canvas.drawCircle(Offset(cx, cy), 16 * s * scale, inner);
+
+    // mosquito emoji
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final emoji = TextSpan(
       text: '🦟',
       style: TextStyle(fontSize: 18 * s * scale),
@@ -559,6 +715,10 @@ class _MapPageState extends State<MapPage> {
       Offset(cx - emojiPainter.width / 2, cy - 12 * s * scale),
     );
 
+<<<<<<< HEAD
+=======
+    // tiny badge
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final badgeW = 46.0 * s * scale;
     final badgeH = 22.0 * s * scale;
     final badgeRect = RRect.fromRectAndRadius(
@@ -567,7 +727,10 @@ class _MapPageState extends State<MapPage> {
     );
     final badgeBg = Paint()..color = Colors.black.withOpacity(0.85);
     canvas.drawRRect(badgeRect, badgeBg);
+<<<<<<< HEAD
 
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final gloss = Paint()..color = Colors.white.withOpacity(0.07);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -601,7 +764,11 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<BitmapDescriptor> _clusterPin({required int nbh}) async {
+<<<<<<< HEAD
     const double s = 0.35;
+=======
+    const double s = 0.35; // keep in sync with mosquito pin
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     final key = 'cluster2x_s${s}_x$nbh';
     final cached = _markerIconCache[key];
     if (cached != null) return cached;
@@ -668,7 +835,11 @@ class _MapPageState extends State<MapPage> {
     return icon;
   }
 
+<<<<<<< HEAD
   // bounds helper
+=======
+  // ---- bounds helper ----
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   LatLngBounds _extend(LatLngBounds? b, LatLng p) {
     if (b == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
@@ -682,6 +853,7 @@ class _MapPageState extends State<MapPage> {
     return LatLngBounds(southwest: sw, northeast: ne);
   }
 
+<<<<<<< HEAD
   /// ---------- Routes API v2 helpers ----------
   Future<LatLng?> _getBrowserLocation() async {
     if (!kIsWeb) return null;
@@ -964,6 +1136,13 @@ class _MapPageState extends State<MapPage> {
     required String caseId,
     required String? status,
     required String locationType,
+=======
+  // ===== Firestore writes for MOH panel + logging =====
+  Future<void> _setReviewStatus({
+    required String caseId,
+    required String? status, // 'no_signs' | 'cleaned' | null
+    required String locationType, // 'home'|'work'|'school'
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     required String locationAddress,
   }) async {
     try {
@@ -975,18 +1154,30 @@ class _MapPageState extends State<MapPage> {
       final snap = await caseRef.get();
       if (snap.exists) caseData = snap.data();
 
+<<<<<<< HEAD
+=======
+      // keep per-case fields (optional compatibility)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       if (status == null) {
         await caseRef.set({
           'review_status': FieldValue.delete(),
           'review_updated_at': FieldValue.delete(),
         }, SetOptions(merge: true));
+<<<<<<< HEAD
       } else if (status == 'no_signs' || status == 'cleaned') {
+=======
+      } else {
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
         await caseRef.set({
           'review_status': status,
           'review_updated_at': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
 
+<<<<<<< HEAD
+=======
+      // log moh_actions (what the map reads)
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       if (status != null) {
         final homeAddr =
             (caseData?['address'] ?? caseData?['patient_address'] ?? '')
@@ -1008,7 +1199,11 @@ class _MapPageState extends State<MapPage> {
 
         await FirebaseFirestore.instance.collection('moh_actions').add({
           'case_id': caseId,
+<<<<<<< HEAD
           'action': status,
+=======
+          'action': status, // 'no_signs' or 'cleaned'
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
           'created_at': FieldValue.serverTimestamp(),
           'patient_address': homeAddr,
           'patient_moh_area': mohArea,
@@ -1021,20 +1216,29 @@ class _MapPageState extends State<MapPage> {
         });
       }
 
+<<<<<<< HEAD
       await _loadCasesAndDraw();
+=======
+      _loadCasesAndDraw();
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               status == null
                   ? 'Status cleared'
+<<<<<<< HEAD
                   : (status == 'new_case'
                         ? 'Logged Possible Site'
                         : 'Marked $locationType: $status'),
+=======
+                  : 'Marked $locationType: $status',
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
             ),
           ),
         );
       }
+<<<<<<< HEAD
     } on FirebaseException catch (e) {
       String msg = 'Failed: ${e.code}';
       if (e.code == 'permission-denied') {
@@ -1046,6 +1250,8 @@ class _MapPageState extends State<MapPage> {
           context,
         ).showSnackBar(SnackBar(content: Text(msg)));
       }
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1055,17 +1261,29 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+<<<<<<< HEAD
   /// ----- UI -----
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final showPanel = _showMohPanel && width >= 1100;
+=======
+  // ===== UI =====
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final showPanel = _showMohPanel && width >= 1100; // auto-hide on narrow
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
     return Scaffold(
       backgroundColor: bg,
       body: Row(
         children: [
+<<<<<<< HEAD
           // Sidebar
+=======
+          // ===== SIDEBAR =====
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
           Container(
             width: 250,
             color: sidebar,
@@ -1150,7 +1368,11 @@ class _MapPageState extends State<MapPage> {
             ),
           ),
 
+<<<<<<< HEAD
           // Content
+=======
+          // ===== CONTENT =====
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
@@ -1158,6 +1380,7 @@ class _MapPageState extends State<MapPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header
+<<<<<<< HEAD
                   LayoutBuilder(
                     builder: (ctx, cons) {
                       final isNarrow = cons.maxWidth < 900;
@@ -1354,6 +1577,90 @@ class _MapPageState extends State<MapPage> {
                         ],
                       );
                     },
+=======
+                  Row(
+                    children: [
+                      const Text(
+                        'Dengue Risk Zones',
+                        style: TextStyle(
+                          color: text,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _legendDot(color: amber, label: 'No-signs (≤21d)'),
+                      const SizedBox(width: 8),
+                      _legendDot(color: green, label: 'Green (≤7d)'),
+                      const Spacer(),
+                      if (_currentMohArea != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: panelAlt,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: border),
+                          ),
+                          child: Text(
+                            'MOH: ${_currentMohArea!}',
+                            style: const TextStyle(
+                              color: subtext,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _loadCasesAndDraw,
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: Colors.white70,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Reload',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: border),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            setState(() => _showMohPanel = !_showMohPanel),
+                        icon: const Icon(
+                          Icons.admin_panel_settings,
+                          color: Colors.white70,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _showMohPanel ? 'Hide MOH Review' : 'MOH Review',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: border),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ],
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                   ),
                   const SizedBox(height: 12),
 
@@ -1377,22 +1684,30 @@ class _MapPageState extends State<MapPage> {
                                     target: _mapCenter,
                                     zoom: _mapZoom,
                                   ),
+<<<<<<< HEAD
                                   cameraTargetBounds: CameraTargetBounds(
                                     _lkBounds,
                                   ),
                                   minMaxZoomPreference:
                                       const MinMaxZoomPreference(6, 18),
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                   myLocationButtonEnabled: false,
                                   myLocationEnabled: false,
                                   zoomControlsEnabled: true,
                                   compassEnabled: true,
                                   markers: _markers,
                                   circles: _circles,
+<<<<<<< HEAD
                                   polylines: _polylines,
                                   onMapCreated: (c) => _mapCtl.complete(c),
                                 ),
 
                                 // status chip
+=======
+                                  onMapCreated: (c) => _mapCtl.complete(c),
+                                ),
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                 Align(
                                   alignment: Alignment.topRight,
                                   child: Container(
@@ -1430,6 +1745,7 @@ class _MapPageState extends State<MapPage> {
                                     ),
                                   ),
                                 ),
+<<<<<<< HEAD
 
                                 // Directions panel
                                 Positioned(
@@ -1629,12 +1945,18 @@ class _MapPageState extends State<MapPage> {
                                     ),
                                   ),
                                 ),
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                               ],
                             ),
                           ),
                         ),
 
+<<<<<<< HEAD
                         // MOH review panel
+=======
+                        // MOH REVIEW PANEL
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                         if (showPanel) ...[
                           const SizedBox(width: 16),
                           SizedBox(
@@ -1647,6 +1969,7 @@ class _MapPageState extends State<MapPage> {
                                 locationType: args.locationType,
                                 locationAddress: args.locationAddress,
                               ),
+<<<<<<< HEAD
                               onRouteTo: (address) {
                                 _toCtl.text = address;
                                 if (_fromCtl.text.isEmpty) {
@@ -1659,6 +1982,8 @@ class _MapPageState extends State<MapPage> {
                                   toText: _toCtl.text.trim(),
                                 );
                               },
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                             ),
                           ),
                         ],
@@ -1701,11 +2026,16 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
+<<<<<<< HEAD
 /// ===== MOH REVIEW PANEL =====
+=======
+// ===== MOH Review Panel =====
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
 class _MohActionArgs {
   _MohActionArgs({
     required this.caseId,
+<<<<<<< HEAD
     required this.status,
     required this.locationType,
     required this.locationAddress,
@@ -1713,10 +2043,20 @@ class _MohActionArgs {
   final String caseId;
   final String? status; // 'new_case' | 'no_signs' | 'cleaned' | null
   final String locationType; // home|work|school
+=======
+    required this.status, // 'no_signs' | 'cleaned' | null
+    required this.locationType, // home|work|school
+    required this.locationAddress,
+  });
+  final String caseId;
+  final String? status;
+  final String locationType;
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   final String locationAddress;
 }
 
 class _MohReviewPanel extends StatefulWidget {
+<<<<<<< HEAD
   const _MohReviewPanel({
     required this.mohArea,
     required this.onAction,
@@ -1726,6 +2066,12 @@ class _MohReviewPanel extends StatefulWidget {
   final String? mohArea;
   final Future<void> Function(_MohActionArgs args) onAction;
   final void Function(String address) onRouteTo;
+=======
+  const _MohReviewPanel({required this.mohArea, required this.onAction});
+
+  final String? mohArea;
+  final Future<void> Function(_MohActionArgs args) onAction;
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
   @override
   State<_MohReviewPanel> createState() => _MohReviewPanelState();
@@ -1767,7 +2113,10 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
     const Color subtext = _MapPageState.subtext;
     const Color green = _MapPageState.green;
     const Color amber = _MapPageState.amber;
+<<<<<<< HEAD
     const Color red = _MapPageState.red;
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
     return Container(
       decoration: BoxDecoration(
@@ -1840,7 +2189,11 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
 
                 final docs = snap.data!.docs
                     .where((d) => _matches(d.data()))
+<<<<<<< HEAD
                     .toList();
+=======
+                    .toList(growable: false);
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
                 return ListView.separated(
                   itemCount: docs.length,
@@ -1885,6 +2238,10 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+<<<<<<< HEAD
+=======
+                            // title + location selector
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                             Row(
                               children: [
                                 Expanded(
@@ -1942,6 +2299,7 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
                             if (locations.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4.0),
+<<<<<<< HEAD
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
@@ -1979,12 +2337,23 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
                                       },
                                     ),
                                   ],
+=======
+                                child: Text(
+                                  locations[selectedType]!,
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                 ),
                               ),
                             const SizedBox(height: 8),
                             Row(
                               children: [
                                 _actionBtn(
+<<<<<<< HEAD
                                   label: 'Possible Site',
                                   icon: Icons.place,
                                   color: red,
@@ -2000,6 +2369,8 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
                                 ),
                                 const SizedBox(width: 6),
                                 _actionBtn(
+=======
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                                   label: 'No Signs',
                                   icon: Icons.check_circle,
                                   color: amber,
@@ -2097,7 +2468,12 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
   }
 }
 
+<<<<<<< HEAD
 /// ----- Small reused bits -----
+=======
+// ===== Small reused bits =====
+
+>>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 class _SideNavItem extends StatelessWidget {
   const _SideNavItem({
     required this.icon,
