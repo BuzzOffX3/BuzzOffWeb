@@ -4,8 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'Hospital/Patientform.dart';
 import 'MOH/complaints.dart';
-import 'NDCU/ndcuanalytic.dart';
-import 'Admin/addusers.dart';
 import 'Forgot.dart';
 
 class SignInPage extends StatefulWidget {
@@ -74,13 +72,13 @@ class _SignInPageState extends State<SignInPage> {
           context,
           MaterialPageRoute(builder: (context) => const ComplaintsPage()),
         );
-      } else if (role == 'admin') {
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const AddUserPage()),
-        );
-      } else if (role == 'ndcu') {
+      } //else if (role == 'admin') {
+      //if (!mounted) return;
+      //Navigator.pushReplacement(
+      //context,
+      //MaterialPageRoute(builder: (context) => const AddUserPage()),
+      //);
+      else if (role == 'ndcu') {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
