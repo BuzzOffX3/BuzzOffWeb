@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // ignore_for_file: avoid_print
 
 import 'dart:async';
@@ -25,29 +24,6 @@ const _primary = Color(0xFF00C2BA); // hospital teal
 
 const Color sidebar = _sidebar;
 const Color purple = _primary; // keep variable name used by UI
-=======
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
-import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'PatientManagement.dart';
-import '../signin.dart';
-
-// ===== THEME: charcoal + cyan =====
-const _bg = Color(0xFF0A0F16);
-const _sidebar = Color(0xFF121A25);
-const _panel = Color(0xFF0E1521);
-const _panelAlt = Color(0xFF111C2B);
-const _ink = Color(0xFF233049);
-const _primary = Color(0xFF22D3EE);
-
-const Color sidebar = _sidebar;
-const Color purple = _primary;
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 const Color text = Colors.white;
 const Color subtext = Colors.white70;
 
@@ -64,13 +40,8 @@ class PatientFormPage extends StatefulWidget {
 
 class _PatientFormPageState extends State<PatientFormPage> {
   final _formKey = GlobalKey<FormState>();
-<<<<<<< HEAD
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
-=======
-  final ScrollController _scrollController = ScrollController();
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
   String? _uid;
   String username = 'User';
@@ -292,14 +263,11 @@ class _PatientFormPageState extends State<PatientFormPage> {
       inputFormatters: inputFormatters,
       maxLines: maxLines,
       style: const TextStyle(color: Colors.white),
-<<<<<<< HEAD
       autofillHints: const [
         AutofillHints.name,
         AutofillHints.givenName,
         AutofillHints.familyName,
       ],
-=======
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white60),
@@ -366,12 +334,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
       _showErr('Patient MOH Area is required');
       return false;
     }
-<<<<<<< HEAD
     if (selectedPhiArea == null ||
         selectedPhiArea!.trim().isNotEmpty == false) {
-=======
-    if (selectedPhiArea == null || selectedPhiArea!.trim().isEmpty) {
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       _showErr('PHI Area is required');
       return false;
     }
@@ -449,24 +413,15 @@ class _PatientFormPageState extends State<PatientFormPage> {
       admitHospitalMoh = (data['moh_area'] ?? '').toString();
     } catch (_) {}
 
-<<<<<<< HEAD
     // ------------- Two-step writes -------------
     try {
       // Common values
-=======
-    try {
-      // Build common (lowercased) values
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final mohLc = (selectedMohArea ?? '').trim().toLowerCase();
       final phiLc = (selectedPhiArea ?? '').trim().toLowerCase();
       final admitMohLc = admitHospitalMoh.trim().toLowerCase();
       final patientAddress = homeAddressController.text.trim();
 
-<<<<<<< HEAD
       // (1) Create dengue case first
-=======
-      // Full record for dengue_cases
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
       final casePayload = <String, dynamic>{
         'hospital_uid': authUser.uid,
         if (hospitalIdProfile.isNotEmpty) 'hospital_id': hospitalIdProfile,
@@ -492,7 +447,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
         'updated_at': FieldValue.serverTimestamp(),
       };
 
-<<<<<<< HEAD
       final fs = FirebaseFirestore.instance;
       final caseRef = await fs.collection('dengue_cases').add(casePayload);
 
@@ -500,16 +454,10 @@ class _PatientFormPageState extends State<PatientFormPage> {
       final mohActionPayload = <String, dynamic>{
         'case_id': caseRef.id, // points to existing case
         'action': 'new_case', // hospitals: only 'new_case'
-=======
-      // Minimal record for moh_actions (ONLY the fields you listed)
-      final mohActionPayload = <String, dynamic>{
-        'action': 'new_case', // change if you prefer 'no_signs', etc.
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
         'actor_uid': authUser.uid,
         'case_status': 'active',
         'created_at': FieldValue.serverTimestamp(),
         'date_of_admission': Timestamp.fromDate(dateOfAdmit!),
-<<<<<<< HEAD
 
         // address-level fields (scrubbed)
         'location_type': 'home',
@@ -528,31 +476,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
         } catch (_) {}
         rethrow;
       }
-=======
-        'location_address': patientAddress,
-        'location_type': 'home',
-        'patient_address': patientAddress,
-        'patient_moh_area': mohLc,
-        'patient_phi_area': phiLc,
-        // 'case_id' will be set when we know the doc id
-      };
-
-      final fs = FirebaseFirestore.instance;
-      final batch = fs.batch();
-
-      // Create the dengue case with an auto id
-      final caseRef = fs.collection('dengue_cases').doc();
-      // tie action to that id
-      final actionRef = fs.collection('moh_actions').doc();
-
-      // fill in case_id on the action payload
-      mohActionPayload['case_id'] = caseRef.id;
-
-      batch.set(caseRef, casePayload);
-      batch.set(actionRef, mohActionPayload);
-
-      await batch.commit();
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -571,16 +494,10 @@ class _PatientFormPageState extends State<PatientFormPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Failed to submit.')));
     }
-<<<<<<< HEAD
     // ------------------------------------------
   }
 
   // ===== Sidebar content =====
-=======
-  }
-
-  // ===== Sidebar content (used as Drawer on small, fixed panel on large) =====
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Widget _buildSidebar(BuildContext context) {
     return Container(
       color: sidebar,
@@ -597,7 +514,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-<<<<<<< HEAD
                     color: purple.withOpacity(.18),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -605,12 +521,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
                     Icons.local_hospital_outlined,
                     color: Colors.white,
                   ),
-=======
-                    color: purple.withOpacity(.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.coronavirus, color: Colors.white),
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
@@ -629,11 +539,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
           ),
           const SizedBox(height: 24),
           const _SideNavItem(
-<<<<<<< HEAD
             icon: Icons.assignment_outlined,
-=======
-            icon: Icons.dashboard_outlined,
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
             label: 'Patient Form',
             active: true,
           ),
@@ -739,11 +645,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
     );
   }
 
-<<<<<<< HEAD
   // ===== Form content =====
-=======
-  // ===== Form content (single column but responsive spacing) =====
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   Widget _buildFormBody(double spacing) {
     return Form(
       key: _formKey,
@@ -821,7 +723,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               digitsOnly10: true,
             ),
             const SizedBox(height: 10),
-<<<<<<< HEAD
 
             AddressAutocompleteField(
               controller: homeAddressController,
@@ -841,20 +742,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
             ),
             const SizedBox(height: 10),
 
-=======
-            _buildTextField(
-              "Home Address",
-              controller: homeAddressController,
-              isRequired: true,
-            ),
-            const SizedBox(height: 10),
-            _buildTextField(
-              "School/Work Address",
-              controller: workAddressController,
-              isRequired: true,
-            ),
-            const SizedBox(height: 10),
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
             _buildTextField(
               "Guardian Contact No.",
               controller: guardianContactController,
@@ -926,11 +813,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
       padding: EdgeInsets.all(compact ? 24 : 40),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-<<<<<<< HEAD
           colors: [Color(0xFF10243E), Color(0xFF0C2C4D)],
-=======
-          colors: [Color(0xFF0D1B2A), Color(0xFF0B2539)],
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
@@ -1037,10 +920,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
                   style: const TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 const SizedBox(height: 2),
-<<<<<<< HEAD
-=======
-                const SizedBox.shrink(),
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                 Text(
                   label,
                   style: const TextStyle(
@@ -1077,28 +956,12 @@ class _PatientFormPageState extends State<PatientFormPage> {
                   onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                 ),
                 title: Row(
-<<<<<<< HEAD
                   children: const [
                     SizedBox(width: 4),
                     Icon(Icons.local_hospital_outlined, color: Colors.white),
                     SizedBox(width: 10),
                     Text('Patient Data'),
                     Spacer(),
-=======
-                  children: [
-                    const SizedBox(width: 4),
-                    const Icon(Icons.coronavirus, color: Colors.white),
-                    const SizedBox(width: 10),
-                    const Text('Patient Data'),
-                    const Spacer(),
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: Colors.white10,
-                      backgroundImage: const AssetImage('images/pfp.png'),
-                      child: Container(),
-                    ),
-                    const SizedBox(width: 12),
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
                   ],
                 ),
               )
@@ -1215,13 +1078,7 @@ class _SideNavItem extends StatelessWidget {
   }
 }
 
-<<<<<<< HEAD
 /// =================== MOH → PHI picker (no GlobalKeys) ===================
-=======
-/// =================== MOH → PHI picker (inline, visible text) ===================
-/// Loads from asset: images/phi_area.json
-/// { "Kolonnawa": ["Orugodawatta","Salamulla"], "Kaduwela": ["Athurugiriya","Bomiriya"] }
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 class MohPhiPickerInline extends StatefulWidget {
   final String? initialMoh;
   final String? initialPhi;
@@ -1241,11 +1098,6 @@ class MohPhiPickerInline extends StatefulWidget {
 }
 
 class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
-<<<<<<< HEAD
-=======
-  final _mohKey = GlobalKey<FormFieldState<String>>();
-  final _phiKey = GlobalKey<FormFieldState<String>>();
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   bool _loading = true;
 
   Map<String, List<String>> _map = {};
@@ -1304,11 +1156,6 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
           : null;
     });
     _emit();
-<<<<<<< HEAD
-=======
-    _mohKey.currentState?.validate();
-    _phiKey.currentState?.validate();
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
   }
 
   @override
@@ -1329,10 +1176,6 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-<<<<<<< HEAD
-=======
-          key: _mohKey,
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
           value: _moh,
           dropdownColor: _panelAlt,
           items: _mohList
@@ -1365,10 +1208,6 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
         AbsorbPointer(
           absorbing: _phiList.isEmpty,
           child: DropdownButtonFormField<String>(
-<<<<<<< HEAD
-=======
-            key: _phiKey,
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
             value: _phiList.contains(_phi) ? _phi : null,
             dropdownColor: _panelAlt,
             items: _phiList
@@ -1417,7 +1256,6 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
     );
   }
 }
-<<<<<<< HEAD
 
 /// ======== Helpers ========
 
@@ -1707,5 +1545,3 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
     );
   }
 }
-=======
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a

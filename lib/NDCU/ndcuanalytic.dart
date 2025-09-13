@@ -1,11 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 // ignore: avoid_web_libraries_in_flutter
-<<<<<<< HEAD
 import 'dart:html' as html hide VoidCallback;
-=======
-import 'dart:html' as html;
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter/material.dart';
@@ -14,10 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'ndcucomplaints.dart';
-<<<<<<< HEAD
 import 'mapnd.dart';
-=======
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
 import 'package:buzzoffwebnew/signin.dart';
 
@@ -413,7 +406,6 @@ class _Sidebar extends StatelessWidget {
               );
             },
           ),
-<<<<<<< HEAD
           _SideNavItem(
             icon: Icons.map_outlined,
             label: 'Map',
@@ -428,8 +420,6 @@ class _Sidebar extends StatelessWidget {
               );
             },
           ),
-=======
->>>>>>> 8d7bebb14a35fc987a3a2e9916bfd360b65b575a
 
           const Spacer(),
           Padding(
