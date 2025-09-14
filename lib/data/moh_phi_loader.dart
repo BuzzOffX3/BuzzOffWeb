@@ -5,11 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 Future<Map<String, List<String>>> loadMohPhi() async {
   // 1) Try Firestore (ref/moh_phi)
   try {
-    final snap = await FirebaseFirestore.instance
-        .collection('ref')
-        .doc('moh_phi')
-        .get();
-    final data = (snap.data() ?? {}) as Map<String, dynamic>;
+    final snap =
+        await FirebaseFirestore.instance.collection('ref').doc('moh_phi').get();
+    final data = (snap.data() ?? {});
     if (data.isNotEmpty) {
       return data.map((k, v) => MapEntry(k, List<String>.from(v as List)));
     }

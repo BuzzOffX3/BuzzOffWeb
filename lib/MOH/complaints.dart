@@ -7,7 +7,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'analytics.dart';
-import 'map.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
@@ -68,9 +67,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
         username = 'Unknown User';
         _role = null;
         _mohArea = null;
-        _complaintsStream = complaintsBase()
-            .orderBy('timestamp', descending: true)
-            .snapshots();
+        _complaintsStream =
+            complaintsBase().orderBy('timestamp', descending: true).snapshots();
       });
       return;
     }
@@ -84,9 +82,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
       username = displayName;
       _role = role;
       _mohArea = mohArea;
-      _complaintsStream = complaintsBase()
-          .orderBy('timestamp', descending: true)
-          .snapshots();
+      _complaintsStream =
+          complaintsBase().orderBy('timestamp', descending: true).snapshots();
     });
   }
 
@@ -243,8 +240,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                       final role = _role?.toLowerCase();
                       final title =
                           (role == 'moh' && (_mohArea?.isNotEmpty ?? false))
-                          ? 'Complaints in ${_mohArea!}'
-                          : 'Complaints';
+                              ? 'Complaints in ${_mohArea!}'
+                              : 'Complaints';
                       return Text(
                         title,
                         style: const TextStyle(
@@ -357,12 +354,12 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                       itemCount: docs.length,
                                       gridDelegate:
                                           SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: cross,
-                                            crossAxisSpacing: 12,
-                                            mainAxisSpacing: 12,
-                                            // Smaller cards: more compact ratio
-                                            childAspectRatio: 1.9,
-                                          ),
+                                        crossAxisCount: cross,
+                                        crossAxisSpacing: 12,
+                                        mainAxisSpacing: 12,
+                                        // Smaller cards: more compact ratio
+                                        childAspectRatio: 1.9,
+                                      ),
                                       itemBuilder: (context, index) {
                                         final doc = docs[index];
                                         final data =
@@ -374,8 +371,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                         final userId = _readStr(data, 'uid');
 
                                         // Address from complaints collection
-                                        final address =
-                                            _readStr(
+                                        final address = _readStr(
                                               data,
                                               'address',
                                               'location',
@@ -404,11 +400,11 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
 
                                         final ts =
                                             data['timestamp'] is Timestamp
-                                            ? data['timestamp'] as Timestamp
-                                            : null;
+                                                ? data['timestamp'] as Timestamp
+                                                : null;
                                         final initialStatus =
                                             _readStr(data, 'status') ??
-                                            'Pending';
+                                                'Pending';
 
                                         final dt =
                                             ts?.toDate() ?? DateTime.now();
@@ -435,9 +431,9 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                             initialStatus: initialStatus,
                                             onDirections: () =>
                                                 _showDirectionsDialog(
-                                                  address: address,
-                                                  mapUrl: mapUrl,
-                                                ),
+                                              address: address,
+                                              mapUrl: mapUrl,
+                                            ),
                                           );
                                         }
 
@@ -451,8 +447,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                           );
                                         } else {
                                           return FutureBuilder<
-                                            DocumentSnapshot
-                                          >(
+                                              DocumentSnapshot>(
                                             future: FirebaseFirestore.instance
                                                 .collection('users')
                                                 .doc(userId)
@@ -465,11 +460,9 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                                   userSnap.hasData &&
                                                   userSnap.data != null &&
                                                   userSnap.data!.exists) {
-                                                final u =
-                                                    userSnap.data!.data()
-                                                        as Map<String, dynamic>;
-                                                displayName =
-                                                    _readStr(
+                                                final u = userSnap.data!.data()
+                                                    as Map<String, dynamic>;
+                                                displayName = _readStr(
                                                       u,
                                                       'name',
                                                       'username',

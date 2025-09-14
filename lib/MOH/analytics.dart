@@ -11,7 +11,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'complaints.dart';
-import 'map.dart';
 
 import 'package:buzzoffwebnew/signin.dart';
 
@@ -112,8 +111,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                               // ======= KPIs (YEAR-SCOPED) =======
                               StreamBuilder<
-                                QuerySnapshot<Map<String, dynamic>>
-                              >(
+                                  QuerySnapshot<Map<String, dynamic>>>(
                                 stream: casesStream,
                                 builder: (context, casesSnap) {
                                   int totalCases = 0; // CURRENT YEAR
@@ -175,12 +173,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                   final growthPct = prevMonthCount == 0
                                       ? (thisMonthCount > 0 ? 100.0 : 0.0)
                                       : ((thisMonthCount - prevMonthCount) /
-                                                prevMonthCount) *
-                                            100.0;
+                                              prevMonthCount) *
+                                          100.0;
 
                                   return StreamBuilder<
-                                    QuerySnapshot<Map<String, dynamic>>
-                                  >(
+                                      QuerySnapshot<Map<String, dynamic>>>(
                                     stream: complaintsStream,
                                     builder: (context, compSnap) {
                                       int totalComplaints = 0; // YEAR
@@ -295,8 +292,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                       _RowWithReport(
                                         left:
                                             _ComplaintsConversionBubbleGridCard(
-                                              mohArea: mohArea,
-                                            ),
+                                          mohArea: mohArea,
+                                        ),
                                         right: _ComplaintsReportCard(
                                           mohArea: mohArea,
                                         ),
@@ -382,10 +379,8 @@ class _BuildWithMoh extends StatelessWidget {
     }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .snapshots(),
+      stream:
+          FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -453,9 +448,9 @@ class _Sidebar extends StatelessWidget {
                         stream: uid == null
                             ? null
                             : FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(uid)
-                                  .snapshots(),
+                                .collection('users')
+                                .doc(uid)
+                                .snapshots(),
                         builder: (context, snap) {
                           final area =
                               ((snap.data?.data()?['moh_area'] ?? '') as String)
@@ -511,7 +506,6 @@ class _Sidebar extends StatelessWidget {
               );
             },
           ),
-
           const Spacer(),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -541,12 +535,11 @@ class _Sidebar extends StatelessWidget {
                             String name = 'User';
                             if (snap.hasData && snap.data!.data() != null) {
                               final m = snap.data!.data()!;
-                              name =
-                                  (m['username'] ??
-                                          m['name'] ??
-                                          m['display_name'] ??
-                                          'User')
-                                      .toString();
+                              name = (m['username'] ??
+                                      m['name'] ??
+                                      m['display_name'] ??
+                                      'User')
+                                  .toString();
                             }
                             return Text(
                               name,
@@ -1326,8 +1319,7 @@ class _AgePyramidCard extends StatelessWidget {
   int _ageFromDob(DateTime dob) {
     final now = DateTime.now();
     int age = now.year - dob.year;
-    final hadBirthday =
-        (now.month > dob.month) ||
+    final hadBirthday = (now.month > dob.month) ||
         (now.month == dob.month && now.day >= dob.day);
     if (!hadBirthday) age--;
     return age;
@@ -1497,7 +1489,7 @@ class _HighRiskZonesCard extends StatelessWidget {
   String _short(String s) {
     final t = s.trim();
     if (t.length <= 12) return t;
-    return t.substring(0, 12) + '…';
+    return '${t.substring(0, 12)}…';
   }
 
   @override
@@ -1535,11 +1527,10 @@ class _HighRiskZonesCard extends StatelessWidget {
                 }
 
                 // bucket by PHI area (fallback to Unknown)
-                final phiRaw = (m['patient_phi_area'] ?? m['phi_area'] ?? '')
-                    .toString();
-                final phi = phiRaw.trim().isEmpty
-                    ? 'Unknown'
-                    : _titleCase(phiRaw);
+                final phiRaw =
+                    (m['patient_phi_area'] ?? m['phi_area'] ?? '').toString();
+                final phi =
+                    phiRaw.trim().isEmpty ? 'Unknown' : _titleCase(phiRaw);
 
                 // only "new" admissions by convention
                 final type = (m['type'] ?? '').toString().toLowerCase().trim();
@@ -1686,10 +1677,12 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
                 final dt = ts.toDate();
                 if (dt.month != month) continue;
                 final di = dt.day - 1;
-                if (dt.year == thisYear && di >= 0 && di < maxDays)
+                if (dt.year == thisYear && di >= 0 && di < maxDays) {
                   cur[di] += 1;
-                if (dt.year == lastYear && di >= 0 && di < maxDays)
+                }
+                if (dt.year == lastYear && di >= 0 && di < maxDays) {
                   prev[di] += 1;
+                }
               }
             }
 
@@ -1698,10 +1691,10 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
               ...prev,
             ].fold<int>(0, (p, c) => c > p ? c : p);
 
-            List<FlSpot> _spots(List<int> a) => [
-              for (int i = 0; i < maxDays; i++)
-                FlSpot((i + 1).toDouble(), a[i].toDouble()),
-            ];
+            List<FlSpot> spots(List<int> a) => [
+                  for (int i = 0; i < maxDays; i++)
+                    FlSpot((i + 1).toDouble(), a[i].toDouble()),
+                ];
 
             return LineChart(
               LineChartData(
@@ -1766,7 +1759,7 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
                     barWidth: 3,
                     color: AnalyticsPage.purple,
                     dotData: const FlDotData(show: false),
-                    spots: _spots(cur),
+                    spots: spots(cur),
                   ),
                   LineChartBarData(
                     isCurved: true,
@@ -1774,7 +1767,7 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
                     color: AnalyticsPage.purpleDim.withOpacity(.6),
                     dashArray: [6, 4],
                     dotData: const FlDotData(show: false),
-                    spots: _spots(prev),
+                    spots: spots(prev),
                   ),
                 ],
               ),
@@ -2289,9 +2282,8 @@ class _MiniAreaChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double maxVal = data.isEmpty
-        ? 1
-        : data.reduce((a, b) => a > b ? a : b);
+    final double maxVal =
+        data.isEmpty ? 1 : data.reduce((a, b) => a > b ? a : b);
     final double top = maxVal <= 0 ? 1 : maxVal * 1.25;
 
     return LineChart(

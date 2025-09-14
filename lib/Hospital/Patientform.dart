@@ -115,9 +115,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
   Future<void> _listenToUserProfile(String uid) async {
     _profileSub?.cancel();
     final fs = FirebaseFirestore.instance;
-    DocumentReference<Map<String, dynamic>> ref = fs
-        .collection('users')
-        .doc(uid);
+    DocumentReference<Map<String, dynamic>> ref =
+        fs.collection('users').doc(uid);
     final usersDoc = await ref.get();
     if (!usersDoc.exists) ref = fs.collection('hospitals').doc(uid);
     _profileSub = ref.snapshots().listen(
@@ -139,14 +138,12 @@ class _PatientFormPageState extends State<PatientFormPage> {
           fullNameController.text.trim().isNotEmpty && dateOfBirth != null;
       step2Complete = dateOfAdmit != null;
 
-      final contactOk =
-          phoneController.text.trim().isNotEmpty &&
+      final contactOk = phoneController.text.trim().isNotEmpty &&
           guardianContactController.text.trim().isNotEmpty &&
           homeAddressController.text.trim().isNotEmpty &&
           workAddressController.text.trim().isNotEmpty;
 
-      final mohPhiOk =
-          selectedMohArea != null &&
+      final mohPhiOk = selectedMohArea != null &&
           selectedMohArea!.trim().isNotEmpty &&
           selectedPhiArea != null &&
           selectedPhiArea!.trim().isNotEmpty;
@@ -187,7 +184,7 @@ class _PatientFormPageState extends State<PatientFormPage> {
               surface: _panelAlt,
               onSurface: Colors.white,
             ),
-            dialogBackgroundColor: _panel,
+            dialogTheme: DialogThemeData(backgroundColor: _panel),
           ),
           child: child!,
         );
@@ -425,23 +422,18 @@ class _PatientFormPageState extends State<PatientFormPage> {
       final casePayload = <String, dynamic>{
         'hospital_uid': authUser.uid,
         if (hospitalIdProfile.isNotEmpty) 'hospital_id': hospitalIdProfile,
-
         'patient_moh_area': mohLc,
         'patient_phi_area': phiLc,
         'admit_hospital_moh': admitMohLc,
-
         'fullname': fullNameController.text.trim(),
         'address': patientAddress,
         'phone_number': phoneController.text.trim(),
         'school_or_work': workAddressController.text.trim(),
         'guardian_contact': guardianContactController.text.trim(),
-
         'date_of_admission': Timestamp.fromDate(dateOfAdmit!),
         'date_of_birth': Timestamp.fromDate(dateOfBirth!),
-
         'status': 'active',
         'case_status': 'active',
-
         'created_at': FieldValue.serverTimestamp(),
         'created_by': authUser.uid,
         'updated_at': FieldValue.serverTimestamp(),
@@ -664,7 +656,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               ),
             ),
             SizedBox(height: spacing),
-
             const Text(
               "👤 Patient Details",
               style: TextStyle(
@@ -687,7 +678,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               firstDate: DateTime(1900),
               lastDate: DateTime.now(),
             ),
-
             SizedBox(height: spacing),
             const Text(
               "🏥 Admission Info",
@@ -705,7 +695,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               firstDate: DateTime(1900),
               lastDate: DateTime.now(),
             ),
-
             SizedBox(height: spacing),
             const Text(
               "📞 Contact & Location",
@@ -723,7 +712,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               digitsOnly10: true,
             ),
             const SizedBox(height: 10),
-
             AddressAutocompleteField(
               controller: homeAddressController,
               labelText: 'Home Address',
@@ -732,7 +720,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               isRequired: true,
             ),
             const SizedBox(height: 10),
-
             AddressAutocompleteField(
               controller: workAddressController,
               labelText: 'School/Work Address',
@@ -741,7 +728,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               isRequired: true,
             ),
             const SizedBox(height: 10),
-
             _buildTextField(
               "Guardian Contact No.",
               controller: guardianContactController,
@@ -749,7 +735,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               digitsOnly10: true,
             ),
             const SizedBox(height: 10),
-
             MohPhiPickerInline(
               initialMoh: selectedMohArea,
               initialPhi: selectedPhiArea,
@@ -762,7 +747,6 @@ class _PatientFormPageState extends State<PatientFormPage> {
               },
               phiRequired: true,
             ),
-
             SizedBox(height: spacing),
             SizedBox(
               width: double.infinity,
@@ -973,9 +957,8 @@ class _PatientFormPageState extends State<PatientFormPage> {
           child: Center(
             child: Container(
               constraints: BoxConstraints(maxWidth: cardMaxWidth),
-              height: isCompact
-                  ? null
-                  : MediaQuery.of(context).size.height * 0.92,
+              height:
+                  isCompact ? null : MediaQuery.of(context).size.height * 0.92,
               decoration: BoxDecoration(
                 color: _panel,
                 borderRadius: BorderRadius.circular(20),
@@ -1032,7 +1015,6 @@ class _SideNavItem extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _SideNavItem({
-    super.key,
     required this.icon,
     required this.label,
     this.active = false,
@@ -1122,9 +1104,10 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
     final normalized = <String, List<String>>{};
     for (final e in data.entries) {
       final moh = _titleCase(e.key.toString());
-      final items =
-          (e.value as List).map((v) => _titleCase(v.toString())).toList()
-            ..sort();
+      final items = (e.value as List)
+          .map((v) => _titleCase(v.toString()))
+          .toList()
+        ..sort();
       normalized[moh] = items;
     }
     final mohs = normalized.keys.toList()..sort();
@@ -1138,9 +1121,8 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
     if (widget.initialMoh != null && widget.initialMoh!.trim().isNotEmpty) {
       _onMohChanged(
         _titleCase(widget.initialMoh!),
-        initialPhi: widget.initialPhi == null
-            ? null
-            : _titleCase(widget.initialPhi!),
+        initialPhi:
+            widget.initialPhi == null ? null : _titleCase(widget.initialPhi!),
       );
     }
   }
@@ -1223,9 +1205,8 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
               _emit();
             },
             decoration: InputDecoration(
-              labelText: widget.phiRequired
-                  ? 'PHI Area *'
-                  : 'PHI Area (optional)',
+              labelText:
+                  widget.phiRequired ? 'PHI Area *' : 'PHI Area (optional)',
               labelStyle: const TextStyle(color: Colors.white70),
               helperText: _phiList.isEmpty
                   ? 'Select MOH first'
@@ -1469,21 +1450,21 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
                     color: Colors.white54,
                   )
                 : (_loading
-                      ? const Padding(
-                          padding: EdgeInsets.all(10),
-                          child: SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white70,
-                            ),
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white70,
                           ),
-                        )
-                      : const Icon(
-                          Icons.place_outlined,
-                          color: Colors.white70,
-                        )),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.place_outlined,
+                        color: Colors.white70,
+                      )),
           ),
           validator: (val) {
             if (!widget.isRequired) return null;

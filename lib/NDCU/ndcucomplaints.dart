@@ -68,9 +68,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
       setState(() {
         username = 'Unknown User';
         _role = null;
-        _complaintsStream = complaintsBase()
-            .orderBy('timestamp', descending: true)
-            .snapshots();
+        _complaintsStream =
+            complaintsBase().orderBy('timestamp', descending: true).snapshots();
       });
       return;
     }
@@ -82,9 +81,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     setState(() {
       username = displayName;
       _role = role;
-      _complaintsStream = complaintsBase()
-          .orderBy('timestamp', descending: true)
-          .snapshots();
+      _complaintsStream =
+          complaintsBase().orderBy('timestamp', descending: true).snapshots();
     });
   }
 
@@ -112,8 +110,7 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
     }
 
     // Priority 3: a saved mapUrl that might already be a Google Maps/short link
-    final mapUrl =
-        _readStr(data, 'mapUrl') ??
+    final mapUrl = _readStr(data, 'mapUrl') ??
         _readStr(data, 'map_link') ??
         _readStr(data, 'maplink') ??
         _readStr(data, 'location_url');
@@ -381,20 +378,19 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                 // Responsive columns
                                 final width = MediaQuery.of(context).size.width;
                                 int crossAxisCount = 3;
-                                if (width < 900)
+                                if (width < 900) {
                                   crossAxisCount = 1;
-                                else if (width < 1300)
-                                  crossAxisCount = 2;
+                                } else if (width < 1300) crossAxisCount = 2;
 
                                 return GridView.builder(
                                   padding: const EdgeInsets.all(16),
                                   gridDelegate:
                                       SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: crossAxisCount,
-                                        crossAxisSpacing: 16,
-                                        mainAxisSpacing: 16,
-                                        childAspectRatio: 1.8,
-                                      ),
+                                    crossAxisCount: crossAxisCount,
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                    childAspectRatio: 1.8,
+                                  ),
                                   itemCount: docs.length,
                                   itemBuilder: (context, index) {
                                     final doc = docs[index];
@@ -411,8 +407,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                     );
                                     final imageUrl =
                                         _readStr(data, 'imageUrl') ??
-                                        _readStr(data, 'image_url') ??
-                                        _readStr(data, 'image');
+                                            _readStr(data, 'image_url') ??
+                                            _readStr(data, 'image');
                                     final ts = data['timestamp'] is Timestamp
                                         ? data['timestamp'] as Timestamp
                                         : null;
@@ -438,8 +434,8 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                         onOpenDirections: directionsUrl == null
                                             ? null
                                             : () => _openExternalUrl(
-                                                directionsUrl,
-                                              ),
+                                                  directionsUrl,
+                                                ),
                                       );
                                     } else {
                                       return FutureBuilder<DocumentSnapshot>(
@@ -454,11 +450,9 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                               userSnap.hasData &&
                                               userSnap.data != null &&
                                               userSnap.data!.exists) {
-                                            final u =
-                                                userSnap.data!.data()
-                                                    as Map<String, dynamic>;
-                                            displayName =
-                                                _readStr(
+                                            final u = userSnap.data!.data()
+                                                as Map<String, dynamic>;
+                                            displayName = _readStr(
                                                   u,
                                                   'name',
                                                   'username',
@@ -476,10 +470,10 @@ class _ComplaintsPageState extends State<ComplaintsPage> {
                                             directionsUrl: directionsUrl,
                                             onOpenDirections:
                                                 directionsUrl == null
-                                                ? null
-                                                : () => _openExternalUrl(
-                                                    directionsUrl,
-                                                  ),
+                                                    ? null
+                                                    : () => _openExternalUrl(
+                                                          directionsUrl,
+                                                        ),
                                           );
                                         },
                                       );

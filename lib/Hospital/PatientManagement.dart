@@ -128,9 +128,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
   Future<void> _listenToUserProfile(String uid) async {
     _profileSub?.cancel();
     final fs = FirebaseFirestore.instance;
-    DocumentReference<Map<String, dynamic>> ref = fs
-        .collection('users')
-        .doc(uid);
+    DocumentReference<Map<String, dynamic>> ref =
+        fs.collection('users').doc(uid);
     final usersDoc = await ref.get();
     if (!usersDoc.exists) ref = fs.collection('hospitals').doc(uid);
     _profileSub = ref.snapshots().listen(
@@ -173,8 +172,8 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
     final data = doc.data() as Map<String, dynamic>;
 
     nameController.text = (data['fullname'] ?? '').toString();
-    guardianContactController.text = (data['guardian_contact'] ?? '')
-        .toString();
+    guardianContactController.text =
+        (data['guardian_contact'] ?? '').toString();
     phoneController.text = (data['phone_number'] ?? '').toString();
 
     mohAreaController.text =
@@ -562,15 +561,13 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
 
                         for (final d in docs) {
                           final m = d.data() as Map<String, dynamic>;
-                          final s = (m['status'] ?? '')
-                              .toString()
-                              .toLowerCase();
+                          final s =
+                              (m['status'] ?? '').toString().toLowerCase();
 
                           final doa = m['date_of_admission'];
                           if (doa is Timestamp) {
                             final ad = doa.toDate();
-                            final inYear =
-                                !ad.isBefore(startOfYear) &&
+                            final inYear = !ad.isBefore(startOfYear) &&
                                 ad.isBefore(startOfNextYear);
                             if (inYear) {
                               totalThisYear++;
@@ -583,8 +580,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                             final ra = m['recovered_at'];
                             if (ra is Timestamp) {
                               final dt = ra.toDate();
-                              final inYear =
-                                  !dt.isBefore(startOfYear) &&
+                              final inYear = !dt.isBefore(startOfYear) &&
                                   dt.isBefore(startOfNextYear);
                               if (inYear) {
                                 dischargedThisYear++;
@@ -595,8 +591,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                             final da = m['deceased_at'];
                             if (da is Timestamp) {
                               final dt = da.toDate();
-                              final inYear =
-                                  !dt.isBefore(startOfYear) &&
+                              final inYear = !dt.isBefore(startOfYear) &&
                                   dt.isBefore(startOfNextYear);
                               if (inYear) {
                                 deathsThisYear++;
@@ -628,8 +623,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                 value: totalThisYear.toString(),
                                 series: allAdmissionsSeries,
                                 color: _primaryDim,
-                                selected:
-                                    _statusFilter == null &&
+                                selected: _statusFilter == null &&
                                     !_filterRecoveredThisMonth,
                                 onTap: () => setState(() {
                                   _statusFilter = null;
@@ -643,8 +637,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                 value: activeThisYear.toString(),
                                 series: allAdmissionsSeries,
                                 color: const Color(0xFF6EA8FE),
-                                selected:
-                                    _statusFilter == 'Active' &&
+                                selected: _statusFilter == 'Active' &&
                                     !_filterRecoveredThisMonth,
                                 onTap: () => setState(() {
                                   if (_statusFilter == 'Active' &&
@@ -663,8 +656,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                 value: dischargedThisYear.toString(),
                                 series: rSeries,
                                 color: const Color(0xFF5FD7C5),
-                                selected:
-                                    _statusFilter == 'Recovered' &&
+                                selected: _statusFilter == 'Recovered' &&
                                     _filterRecoveredThisMonth,
                                 onTap: () => setState(() {
                                   if (_statusFilter == 'Recovered' &&
@@ -684,8 +676,7 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                                 value: deathsThisYear.toString(),
                                 series: dSeries,
                                 color: const Color(0xFFFF6B6B),
-                                selected:
-                                    _statusFilter == 'Deceased' &&
+                                selected: _statusFilter == 'Deceased' &&
                                     !_filterRecoveredThisMonth,
                                 onTap: () => setState(() {
                                   if (_statusFilter == 'Deceased' &&
@@ -1228,7 +1219,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   const Text('Basic', style: sectionTitleStyle),
                   const SizedBox(height: 8),
                   buildTextField(
@@ -1236,7 +1226,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     'Full Name',
                     icon: Icons.person,
                   ),
-
                   const SizedBox(height: 8),
                   const Text('Contacts & Location', style: sectionTitleStyle),
                   const SizedBox(height: 8),
@@ -1260,11 +1249,9 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     'School/Work Address',
                     icon: Icons.school,
                   ),
-
                   const SizedBox(height: 8),
                   const Text('Public Health Areas', style: sectionTitleStyle),
                   const SizedBox(height: 8),
-
                   MohPhiPickerInline(
                     initialMoh: mohAreaController.text,
                     initialPhi: phiAreaController.text,
@@ -1275,7 +1262,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                     },
                     phiRequired: true,
                   ),
-
                   const SizedBox(height: 14),
                   if (status != null && status!.isNotEmpty)
                     Padding(
@@ -1288,7 +1274,6 @@ class _PatientManagementPageState extends State<PatientManagementPage> {
                         backgroundColor: getStatusColor(status!),
                       ),
                     ),
-
                   ElevatedButton.icon(
                     icon: _saving
                         ? const SizedBox(
@@ -1487,7 +1472,6 @@ class _SideNavItem extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
   const _SideNavItem({
-    super.key,
     required this.icon,
     required this.label,
     this.active = false,
@@ -1565,9 +1549,8 @@ class MiniAreaChart extends StatelessWidget {
   const MiniAreaChart({super.key, required this.data, required this.color});
   @override
   Widget build(BuildContext context) {
-    final double maxVal = data.isEmpty
-        ? 1
-        : data.reduce((a, b) => a > b ? a : b);
+    final double maxVal =
+        data.isEmpty ? 1 : data.reduce((a, b) => a > b ? a : b);
     final double top = maxVal <= 0 ? 1 : maxVal * 1.25;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
@@ -1631,14 +1614,12 @@ class ListToCsvConverter {
   const ListToCsvConverter();
   String convert(List<List<String>> rows) => rows.map(_toCsvRow).join('\n');
   String _toCsvRow(List<String> row) {
-    return row
-        .map((cell) {
-          final needsQuotes =
-              cell.contains(',') || cell.contains('"') || cell.contains('\n');
-          var out = cell.replaceAll('"', '""');
-          return needsQuotes ? '"$out"' : out;
-        })
-        .join(',');
+    return row.map((cell) {
+      final needsQuotes =
+          cell.contains(',') || cell.contains('"') || cell.contains('\n');
+      var out = cell.replaceAll('"', '""');
+      return needsQuotes ? '"$out"' : out;
+    }).join(',');
   }
 }
 
@@ -1691,12 +1672,11 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
       final normalized = <String, List<String>>{};
       for (final e in raw.entries) {
         final moh = _titleCase(e.key.toString());
-        final items =
-            (e.value as List)
-                .map((v) => _titleCase(v.toString()))
-                .toSet()
-                .toList()
-              ..sort();
+        final items = (e.value as List)
+            .map((v) => _titleCase(v.toString()))
+            .toSet()
+            .toList()
+          ..sort();
         normalized[moh] = items;
       }
       final mohs = normalized.keys.toList()..sort();
@@ -1712,9 +1692,8 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
       if (widget.initialMoh != null && widget.initialMoh!.trim().isNotEmpty) {
         _onMohChanged(
           _titleCase(widget.initialMoh!),
-          initialPhi: widget.initialPhi == null
-              ? null
-              : _titleCase(widget.initialPhi!),
+          initialPhi:
+              widget.initialPhi == null ? null : _titleCase(widget.initialPhi!),
         );
       }
     } catch (e) {
@@ -1811,13 +1790,11 @@ class _MohPhiPickerInlineState extends State<MohPhiPickerInline> {
               _emit();
             },
             decoration: InputDecoration(
-              labelText: widget.phiRequired
-                  ? 'PHI Area *'
-                  : 'PHI Area (optional)',
+              labelText:
+                  widget.phiRequired ? 'PHI Area *' : 'PHI Area (optional)',
               labelStyle: const TextStyle(color: Colors.white70),
-              helperText: _phiList.isEmpty
-                  ? 'Select MOH first'
-                  : 'Filtered by MOH',
+              helperText:
+                  _phiList.isEmpty ? 'Select MOH first' : 'Filtered by MOH',
               helperStyle: const TextStyle(color: Colors.white38),
               prefixIcon: const Icon(Icons.badge, color: Colors.white54),
               filled: true,

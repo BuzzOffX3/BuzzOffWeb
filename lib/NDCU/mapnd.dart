@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,6 +15,9 @@ import 'dart:html' as dom show document; // web meta-key
 
 import 'ndcuanalytic.dart';
 import 'ndcucomplaints.dart';
+
+const bool kTestMode =
+    bool.fromEnvironment('FLUTTER_TEST', defaultValue: false);
 
 /// Map point (sourced from `moh_actions`)
 class _CasePoint {
@@ -77,8 +79,8 @@ class _MapPageState extends State<MapPage> {
   final Completer<GoogleMapController> _mapCtl = Completer();
   final Set<Circle> _circles = {};
   final Set<Marker> _markers = {};
-  LatLng _mapCenter = const LatLng(6.9271, 79.8612);
-  double _mapZoom = 11;
+  final LatLng _mapCenter = const LatLng(6.9271, 79.8612);
+  final double _mapZoom = 11;
 
   // Lock to Sri Lanka (generous padding)
   static final LatLngBounds _lkBounds = LatLngBounds(
@@ -174,6 +176,16 @@ class _MapPageState extends State<MapPage> {
   //    Drive map from moh_actions
   // ==============================
   Future<void> _loadCasesAndDraw() async {
+    if (kTestMode) {
+      setState(() {
+        _loading = false;
+        _statusMsg = 'Test mode';
+        _circles.clear();
+        _markers.clear();
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _statusMsg = 'Loading MOH actions…';
@@ -268,12 +280,11 @@ class _MapPageState extends State<MapPage> {
         final pos = await _geocodeAddress(addr);
         if (pos == null) continue;
 
-        final ageDays =
-            (admit != null
-                    ? DateTime.now().difference(admit)
-                    : DateTime.now().difference(actAt))
-                .inDays
-                .clamp(0, 9999);
+        final ageDays = (admit != null
+                ? DateTime.now().difference(admit)
+                : DateTime.now().difference(actAt))
+            .inDays
+            .clamp(0, 9999);
 
         points.add(
           _CasePoint(
@@ -939,24 +950,27 @@ class _MapPageState extends State<MapPage> {
                             clipBehavior: Clip.hardEdge,
                             child: Stack(
                               children: [
-                                GoogleMap(
-                                  initialCameraPosition: CameraPosition(
-                                    target: _mapCenter,
-                                    zoom: _mapZoom,
-                                  ),
-                                  cameraTargetBounds: CameraTargetBounds(
-                                    _lkBounds,
-                                  ),
-                                  minMaxZoomPreference:
-                                      const MinMaxZoomPreference(6, 18),
-                                  myLocationButtonEnabled: false,
-                                  myLocationEnabled: false,
-                                  zoomControlsEnabled: true,
-                                  compassEnabled: true,
-                                  markers: _markers,
-                                  circles: _circles,
-                                  onMapCreated: (c) => _mapCtl.complete(c),
-                                ),
+                                kTestMode
+                                    ? Container(
+                                        key: const Key('map-placeholder'))
+                                    : GoogleMap(
+                                        initialCameraPosition: CameraPosition(
+                                          target: _mapCenter,
+                                          zoom: _mapZoom,
+                                        ),
+                                        cameraTargetBounds:
+                                            CameraTargetBounds(_lkBounds),
+                                        minMaxZoomPreference:
+                                            const MinMaxZoomPreference(6, 18),
+                                        myLocationButtonEnabled: false,
+                                        myLocationEnabled: false,
+                                        zoomControlsEnabled: true,
+                                        compassEnabled: true,
+                                        markers: _markers,
+                                        circles: _circles,
+                                        onMapCreated: (c) =>
+                                            _mapCtl.complete(c),
+                                      ),
                                 Align(
                                   alignment: Alignment.topRight,
                                   child: Container(
@@ -1172,17 +1186,15 @@ class _MohReviewPanelReadOnlyState extends State<_MohReviewPanelReadOnly> {
 
                     final homeAddr =
                         (m['address'] ?? m['patient_address'] ?? '').toString();
-                    final workAddr =
-                        (m['work_address'] ??
-                                m['patient_work_address'] ??
-                                m['office_address'] ??
-                                '')
-                            .toString();
-                    final schoolAddr =
-                        (m['school_address'] ??
-                                m['patient_school_address'] ??
-                                '')
-                            .toString();
+                    final workAddr = (m['work_address'] ??
+                            m['patient_work_address'] ??
+                            m['office_address'] ??
+                            '')
+                        .toString();
+                    final schoolAddr = (m['school_address'] ??
+                            m['patient_school_address'] ??
+                            '')
+                        .toString();
 
                     // read-only compact card
                     return Column(

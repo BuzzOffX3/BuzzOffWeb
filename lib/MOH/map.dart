@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,10 +11,19 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'dart:html' as dom show document, window; // web: meta key + geolocation
+
+// ⬇️ Conditional "dom" shim: real on web, harmless stub elsewhere
+import '../web_dom_stub.dart' if (dart.library.html) '../web_dom_real.dart'
+    as dom;
 
 import 'analytics.dart';
 import 'complaints.dart';
+
+// ---- Test-mode toggles (set via --dart-define) ----
+const bool kTestMode =
+    bool.fromEnvironment('FLUTTER_TEST', defaultValue: false);
+const String kTestApiKey =
+    String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
 
 /// ----- MODEL -----
 class _CasePoint {
@@ -39,8 +47,19 @@ class _CasePoint {
 }
 
 class MapPage extends StatefulWidget {
-  const MapPage({super.key, this.mohArea});
+  const MapPage({
+    super.key,
+    this.mohArea,
+
+    /// NEW: force test mode (overrides compile-time flag).
+    this.forceTestMode,
+  });
+
   final String? mohArea;
+
+  /// When true, bypasses Firebase/HTTP and renders the placeholder.
+  /// When null, falls back to compile-time `kTestMode`.
+  final bool? forceTestMode;
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -79,8 +98,8 @@ class _MapPageState extends State<MapPage> {
   final Set<Circle> _circles = {};
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
-  LatLng _mapCenter = const LatLng(6.9271, 79.8612);
-  double _mapZoom = 11;
+  final LatLng _mapCenter = const LatLng(6.9271, 79.8612);
+  final double _mapZoom = 11;
 
   // Sri Lanka bounds
   static final LatLngBounds _lkBounds = LatLngBounds(
@@ -112,8 +131,13 @@ class _MapPageState extends State<MapPage> {
   LatLng? _myLocation;
   bool _gettingMyLoc = false;
 
-  // Browser key from <meta name="gmaps-key" content="...">
+  /// NEW: unified test-mode switch
+  bool get _isTestMode => widget.forceTestMode ?? kTestMode;
+
+  // Browser key from <meta name="gmaps-key" content="..."> (or dart-define in tests)
   String get _apiKey {
+    if (_isTestMode && kTestApiKey.isNotEmpty)
+      return kTestApiKey; // use fake key in tests if provided
     final el = dom.document.querySelector('meta[name="gmaps-key"]');
     return el?.getAttribute('content') ?? '';
   }
@@ -144,15 +168,12 @@ class _MapPageState extends State<MapPage> {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return null;
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final m = doc.data();
       if (m == null) return null;
-      final area = (m['moh_area'] ?? m['MOH_area'] ?? m['area'])
-          ?.toString()
-          .trim();
+      final area =
+          (m['moh_area'] ?? m['MOH_area'] ?? m['area'])?.toString().trim();
       return (area != null && area.isNotEmpty) ? area : null;
     } catch (e) {
       print('MOH area fetch failed: $e');
@@ -181,9 +202,7 @@ class _MapPageState extends State<MapPage> {
     final loc = results.first['geometry']?['location'];
     if (loc is Map && loc['lat'] is num && loc['lng'] is num) {
       final p = LatLng(
-        (loc['lat'] as num).toDouble(),
-        (loc['lng'] as num).toDouble(),
-      );
+          (loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble());
       _geoCache[key] = p;
       return p;
     }
@@ -210,6 +229,18 @@ class _MapPageState extends State<MapPage> {
 
   /// ---------- Load data and draw circles/markers ----------
   Future<void> _loadCasesAndDraw() async {
+    // NEW: deterministic test-mode short-circuit
+    if (_isTestMode) {
+      setState(() {
+        _loading = false;
+        _statusMsg = 'Test mode';
+        _circles.clear();
+        _markers.clear();
+        _polylines.clear();
+      });
+      return;
+    }
+
     setState(() {
       _loading = true;
       _statusMsg = 'Loading MOH actions…';
@@ -219,19 +250,16 @@ class _MapPageState extends State<MapPage> {
     });
 
     try {
-      Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(
-        'moh_actions',
-      );
+      Query<Map<String, dynamic>> q =
+          FirebaseFirestore.instance.collection('moh_actions');
 
       if (_currentMohArea != null && _currentMohArea!.isNotEmpty) {
         q = q.where('patient_moh_area', isEqualTo: _currentMohArea);
       }
 
       final since = DateTime.now().subtract(const Duration(days: 60));
-      q = q.where(
-        'created_at',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(since),
-      );
+      q = q.where('created_at',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(since));
 
       final qs = await q.get();
       if (qs.docs.isEmpty) {
@@ -304,12 +332,11 @@ class _MapPageState extends State<MapPage> {
         final pos = await _geocodeAddress(addr);
         if (pos == null) continue;
 
-        final ageDays =
-            (admit != null
-                    ? DateTime.now().difference(admit)
-                    : DateTime.now().difference(actAt))
-                .inDays
-                .clamp(0, 9999);
+        final ageDays = (admit != null
+                ? DateTime.now().difference(admit)
+                : DateTime.now().difference(actAt))
+            .inDays
+            .clamp(0, 9999);
 
         points.add(
           _CasePoint(
@@ -359,9 +386,7 @@ class _MapPageState extends State<MapPage> {
         final isCluster = clusterIds.contains(p.id);
 
         final style = _styleFromAction(
-          reviewStatus: p.reviewStatus,
-          reviewAt: p.reviewAt,
-        );
+            reviewStatus: p.reviewStatus, reviewAt: p.reviewAt);
         if (!style.visible) continue;
 
         circles.add(
@@ -379,9 +404,7 @@ class _MapPageState extends State<MapPage> {
         final BitmapDescriptor icon = isCluster
             ? await _clusterPin(nbh: nbh)
             : await _mosquitoPinWithDays(
-                days: p.ageDays,
-                baseColor: style.pinColor,
-              );
+                days: p.ageDays, baseColor: style.pinColor);
 
         markers.add(
           Marker(
@@ -545,19 +568,15 @@ class _MapPageState extends State<MapPage> {
     final inner = Paint()..color = Colors.black.withOpacity(0.75);
     canvas.drawCircle(Offset(cx, cy), 16 * s * scale, inner);
 
-    final emoji = TextSpan(
-      text: '🦟',
-      style: TextStyle(fontSize: 18 * s * scale),
-    );
+    final emoji =
+        TextSpan(text: '🦟', style: TextStyle(fontSize: 18 * s * scale));
     final emojiPainter = TextPainter(
       text: emoji,
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: 40 * s * scale);
     emojiPainter.paint(
-      canvas,
-      Offset(cx - emojiPainter.width / 2, cy - 12 * s * scale),
-    );
+        canvas, Offset(cx - emojiPainter.width / 2, cy - 12 * s * scale));
 
     final badgeW = 46.0 * s * scale;
     final badgeH = 22.0 * s * scale;
@@ -704,8 +723,7 @@ class _MapPageState extends State<MapPage> {
     if (!kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Browser location is only available on web'),
-        ),
+            content: Text('Browser location is only available on web')),
       );
       return;
     }
@@ -715,8 +733,7 @@ class _MapPageState extends State<MapPage> {
     if (loc == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Couldn’t get your location (permission/timeout)'),
-        ),
+            content: Text('Couldn’t get your location (permission/timeout)')),
       );
       return;
     }
@@ -724,9 +741,7 @@ class _MapPageState extends State<MapPage> {
     _fromCtl.text = 'My location';
     if (_toCtl.text.trim().isNotEmpty) {
       _drawRouteFromTo(
-        fromText: _fromCtl.text.trim(),
-        toText: _toCtl.text.trim(),
-      );
+          fromText: _fromCtl.text.trim(), toText: _toCtl.text.trim());
     }
   }
 
@@ -743,9 +758,8 @@ class _MapPageState extends State<MapPage> {
       return null;
     }
 
-    final m = RegExp(
-      r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$',
-    ).firstMatch(t);
+    final m = RegExp(r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$')
+        .firstMatch(t);
     if (m != null) {
       final lat = double.tryParse(m.group(1)!);
       final lng = double.tryParse(m.group(2)!);
@@ -799,29 +813,23 @@ class _MapPageState extends State<MapPage> {
     LatLng origin,
     LatLng dest,
   ) async {
-    final uri = Uri.parse(
-      'https://routes.googleapis.com/directions/v2:computeRoutes',
-    );
+    final uri =
+        Uri.parse('https://routes.googleapis.com/directions/v2:computeRoutes');
 
     final body = jsonEncode({
       "origin": {
         "location": {
-          "latLng": {
-            "latitude": origin.latitude,
-            "longitude": origin.longitude,
-          },
-        },
+          "latLng": {"latitude": origin.latitude, "longitude": origin.longitude}
+        }
       },
       "destination": {
         "location": {
-          "latLng": {"latitude": dest.latitude, "longitude": dest.longitude},
-        },
+          "latLng": {"latitude": dest.latitude, "longitude": dest.longitude}
+        }
       },
       "travelMode": "DRIVE",
       "routingPreference": "TRAFFIC_AWARE",
       "computeAlternativeRoutes": false,
-
-      // ✅ correct enum values
       "polylineEncoding": "GEO_JSON_LINESTRING",
       "polylineQuality": "HIGH_QUALITY",
     });
@@ -832,9 +840,7 @@ class _MapPageState extends State<MapPage> {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": _apiKey,
         "X-Goog-FieldMask":
-            "routes.distanceMeters,routes.duration,"
-            "routes.polyline.geoJsonLinestring,"
-            "routes.polyline.encodedPolyline",
+            "routes.distanceMeters,routes.duration,routes.polyline.geoJsonLinestring,routes.polyline.encodedPolyline",
       },
       body: body,
     );
@@ -858,9 +864,8 @@ class _MapPageState extends State<MapPage> {
   }) async {
     if (_apiKey.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Missing Google API key')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Missing Google API key')));
       }
       return;
     }
@@ -874,8 +879,7 @@ class _MapPageState extends State<MapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Couldn’t resolve origin or destination'),
-          ),
+              content: Text('Couldn’t resolve origin or destination')),
         );
       }
       setState(() => _routeSummary = null);
@@ -967,9 +971,8 @@ class _MapPageState extends State<MapPage> {
     required String locationAddress,
   }) async {
     try {
-      final caseRef = FirebaseFirestore.instance
-          .collection('dengue_cases')
-          .doc(caseId);
+      final caseRef =
+          FirebaseFirestore.instance.collection('dengue_cases').doc(caseId);
 
       Map<String, dynamic>? caseData;
       final snap = await caseRef.get();
@@ -1029,8 +1032,8 @@ class _MapPageState extends State<MapPage> {
               status == null
                   ? 'Status cleared'
                   : (status == 'new_case'
-                        ? 'Logged Possible Site'
-                        : 'Marked $locationType: $status'),
+                      ? 'Logged Possible Site'
+                      : 'Marked $locationType: $status'),
             ),
           ),
         );
@@ -1042,15 +1045,13 @@ class _MapPageState extends State<MapPage> {
             'Permission denied. Only hospitals can log "Possible Site" (new_case).';
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     }
   }
@@ -1071,81 +1072,33 @@ class _MapPageState extends State<MapPage> {
             color: sidebar,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: purple.withOpacity(.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.coronavirus,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'MAP ${_currentMohArea != null ? "· ${_currentMohArea!}" : ""}',
-                          style: const TextStyle(
-                            color: text,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: .5,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
+              children: const [
+                SizedBox(height: 24),
+                // Header row with icon + title
+                _SidebarHeader(),
+                SizedBox(height: 24),
                 _SideNavItem(
                   icon: Icons.dashboard_outlined,
                   label: 'Analytics',
-                  onTap: () {
-                    Navigator.pushReplacement(
-                      context,
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const AnalyticsPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
+                  onTap: null, // replaced via wrapper below
                 ),
                 _SideNavItem(
                   icon: Icons.receipt_long_outlined,
                   label: 'Complaints',
-                  onTap: () {
-                    Navigator.pushReplacement(
-                      context,
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const ComplaintsPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
+                  onTap: null, // replaced via wrapper below
                 ),
-                const _SideNavItem(
+                _SideNavItem(
                   icon: Icons.map_outlined,
                   label: 'Map',
                   active: true,
                   onTap: null,
                 ),
-                const Spacer(),
-                const Padding(
+                Spacer(),
+                Padding(
                   padding: EdgeInsets.all(16),
                   child: _UserFooter(),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
               ],
             ),
           ),
@@ -1157,21 +1110,22 @@ class _MapPageState extends State<MapPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header
+                  // Header with legends + controls
                   LayoutBuilder(
                     builder: (ctx, cons) {
                       final isNarrow = cons.maxWidth < 900;
 
                       Widget legends() => Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _legendDot(color: red, label: 'New case (≤60d)'),
-                          _legendDot(color: amber, label: 'No-signs (≤21d)'),
-                          _legendDot(color: green, label: 'Green (≤7d)'),
-                        ],
-                      );
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _legendDot(color: red, label: 'New case (≤60d)'),
+                              _legendDot(
+                                  color: amber, label: 'No-signs (≤21d)'),
+                              _legendDot(color: green, label: 'Green (≤7d)'),
+                            ],
+                          );
 
                       if (isNarrow) {
                         return Column(
@@ -1372,25 +1326,26 @@ class _MapPageState extends State<MapPage> {
                             clipBehavior: Clip.hardEdge,
                             child: Stack(
                               children: [
-                                GoogleMap(
-                                  initialCameraPosition: CameraPosition(
-                                    target: _mapCenter,
-                                    zoom: _mapZoom,
+                                // ⬇️ use _isTestMode instead of kTestMode
+                                if (_isTestMode)
+                                  const _MapPlaceholder()
+                                else
+                                  GoogleMap(
+                                    initialCameraPosition: CameraPosition(
+                                        target: _mapCenter, zoom: _mapZoom),
+                                    cameraTargetBounds:
+                                        CameraTargetBounds(_lkBounds),
+                                    minMaxZoomPreference:
+                                        const MinMaxZoomPreference(6, 18),
+                                    myLocationButtonEnabled: false,
+                                    myLocationEnabled: false,
+                                    zoomControlsEnabled: true,
+                                    compassEnabled: true,
+                                    markers: _markers,
+                                    circles: _circles,
+                                    polylines: _polylines,
+                                    onMapCreated: (c) => _mapCtl.complete(c),
                                   ),
-                                  cameraTargetBounds: CameraTargetBounds(
-                                    _lkBounds,
-                                  ),
-                                  minMaxZoomPreference:
-                                      const MinMaxZoomPreference(6, 18),
-                                  myLocationButtonEnabled: false,
-                                  myLocationEnabled: false,
-                                  zoomControlsEnabled: true,
-                                  compassEnabled: true,
-                                  markers: _markers,
-                                  circles: _circles,
-                                  polylines: _polylines,
-                                  onMapCreated: (c) => _mapCtl.complete(c),
-                                ),
 
                                 // status chip
                                 Align(
@@ -1490,10 +1445,9 @@ class _MapPageState extends State<MapPage> {
                                                       width: 18,
                                                       child:
                                                           CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                            color:
-                                                                Colors.white70,
-                                                          ),
+                                                        strokeWidth: 2,
+                                                        color: Colors.white70,
+                                                      ),
                                                     )
                                                   : const Icon(
                                                       Icons.gps_fixed,
@@ -1539,8 +1493,8 @@ class _MapPageState extends State<MapPage> {
                                           children: [
                                             ElevatedButton.icon(
                                               onPressed: () {
-                                                final from = _fromCtl.text
-                                                    .trim();
+                                                final from =
+                                                    _fromCtl.text.trim();
                                                 final to = _toCtl.text.trim();
                                                 if (from.isNotEmpty &&
                                                     to.isNotEmpty) {
@@ -1576,9 +1530,9 @@ class _MapPageState extends State<MapPage> {
                                                     Colors.lightBlueAccent,
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 10,
-                                                    ),
+                                                  horizontal: 12,
+                                                  vertical: 10,
+                                                ),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(10),
@@ -1603,9 +1557,9 @@ class _MapPageState extends State<MapPage> {
                                                 side: BorderSide(color: border),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 10,
-                                                    ),
+                                                  horizontal: 12,
+                                                  vertical: 10,
+                                                ),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(10),
@@ -1651,8 +1605,9 @@ class _MapPageState extends State<MapPage> {
                                 _toCtl.text = address;
                                 if (_fromCtl.text.isEmpty) {
                                   _fromCtl.text = 'My location';
-                                  if (_myLocation == null)
+                                  if (_myLocation == null) {
                                     _useMyLocationAsFrom();
+                                  }
                                 }
                                 _drawRouteFromTo(
                                   fromText: _fromCtl.text.trim(),
@@ -1701,8 +1656,62 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
-/// ===== MOH REVIEW PANEL =====
+/// Sidebar header piece
+class _SidebarHeader extends StatelessWidget {
+  const _SidebarHeader();
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: _MapPageState.purple.withOpacity(.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.coronavirus,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'MAP',
+              style: TextStyle(
+                color: _MapPageState.text,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .5,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
+/// Lightweight placeholder used only in tests (kTestMode/forceTestMode)
+class _MapPlaceholder extends StatelessWidget {
+  const _MapPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text(
+        'Map placeholder (test mode)',
+        style: TextStyle(color: Colors.white54),
+      ),
+    );
+  }
+}
+
+/// ===== MOH REVIEW PANEL =====
 class _MohActionArgs {
   _MohActionArgs({
     required this.caseId,
@@ -1838,9 +1847,8 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
                   );
                 }
 
-                final docs = snap.data!.docs
-                    .where((d) => _matches(d.data()))
-                    .toList();
+                final docs =
+                    snap.data!.docs.where((d) => _matches(d.data())).toList();
 
                 return ListView.separated(
                   itemCount: docs.length,
@@ -1855,23 +1863,23 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
 
                     final homeAddr =
                         (m['address'] ?? m['patient_address'] ?? '').toString();
-                    final workAddr =
-                        (m['work_address'] ??
-                                m['patient_work_address'] ??
-                                m['office_address'] ??
-                                '')
-                            .toString();
-                    final schoolAddr =
-                        (m['school_address'] ??
-                                m['patient_school_address'] ??
-                                '')
-                            .toString();
+                    final workAddr = (m['work_address'] ??
+                            m['patient_work_address'] ??
+                            m['office_address'] ??
+                            '')
+                        .toString();
+                    final schoolAddr = (m['school_address'] ??
+                            m['patient_school_address'] ??
+                            '')
+                        .toString();
 
                     final locations = <String, String>{};
-                    if (homeAddr.trim().isNotEmpty)
+                    if (homeAddr.trim().isNotEmpty) {
                       locations['home'] = homeAddr;
-                    if (workAddr.trim().isNotEmpty)
+                    }
+                    if (workAddr.trim().isNotEmpty) {
                       locations['work'] = workAddr;
+                    }
                     if (schoolAddr.trim().isNotEmpty) {
                       locations['school'] = schoolAddr;
                     }
@@ -1932,8 +1940,9 @@ class _MohReviewPanelState extends State<_MohReviewPanel> {
                                         );
                                       }).toList(),
                                       onChanged: (v) {
-                                        if (v != null)
+                                        if (v != null) {
                                           setRow(() => selectedType = v);
+                                        }
                                       },
                                     ),
                                   ),
@@ -2112,10 +2121,38 @@ class _SideNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    VoidCallback? handler = onTap;
+    // Wrap the placeholders with proper navigation (only if inactive)
+    if (!active) {
+      if (label == 'Analytics') {
+        handler = () {
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) => const AnalyticsPage(),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
+          );
+        };
+      } else if (label == 'Complaints') {
+        handler = () {
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) => const ComplaintsPage(),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
+          );
+        };
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: InkWell(
-        onTap: active ? null : onTap,
+        onTap: active ? null : handler,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

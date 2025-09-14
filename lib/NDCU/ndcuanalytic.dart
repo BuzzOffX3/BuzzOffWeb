@@ -152,12 +152,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               final growthPct = prevMonthCount == 0
                                   ? (thisMonthCount > 0 ? 100.0 : 0.0)
                                   : ((thisMonthCount - prevMonthCount) /
-                                            prevMonthCount) *
-                                        100.0;
+                                          prevMonthCount) *
+                                      100.0;
 
                               return StreamBuilder<
-                                QuerySnapshot<Map<String, dynamic>>
-                              >(
+                                  QuerySnapshot<Map<String, dynamic>>>(
                                 stream: _complaintsStreamAll(),
                                 builder: (context, compSnap) {
                                   int totalComplaints = 0;
@@ -420,7 +419,6 @@ class _Sidebar extends StatelessWidget {
               );
             },
           ),
-
           const Spacer(),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -450,12 +448,11 @@ class _Sidebar extends StatelessWidget {
                             String name = 'User';
                             if (snap.hasData && snap.data!.data() != null) {
                               final m = snap.data!.data()!;
-                              name =
-                                  (m['username'] ??
-                                          m['name'] ??
-                                          m['display_name'] ??
-                                          'User')
-                                      .toString();
+                              name = (m['username'] ??
+                                      m['name'] ??
+                                      m['display_name'] ??
+                                      'User')
+                                  .toString();
                             }
                             return Text(
                               name,
@@ -708,9 +705,8 @@ class _YearlyCasesBarCard extends StatelessWidget {
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .snapshots(),
+          stream:
+              FirebaseFirestore.instance.collection('dengue_cases').snapshots(),
           builder: (context, snap) {
             final now = DateTime.now();
             final years = List<int>.generate(6, (i) => now.year - 5 + i);
@@ -844,9 +840,8 @@ class _NewVsTransferredStackedCard extends StatelessWidget {
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .snapshots(),
+          stream:
+              FirebaseFirestore.instance.collection('dengue_cases').snapshots(),
           builder: (context, snap) {
             final now = DateTime.now();
             final start = DateTime(now.year, now.month - 11, 1);
@@ -1016,9 +1011,8 @@ class _ComplaintsConversionBubbleGridCard extends StatelessWidget {
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .snapshots(),
+          stream:
+              FirebaseFirestore.instance.collection('dengue_cases').snapshots(),
           builder: (context, casesSnap) {
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
@@ -1164,8 +1158,7 @@ class _AgePyramidCard extends StatelessWidget {
   int _ageFromDob(DateTime dob) {
     final now = DateTime.now();
     int age = now.year - dob.year;
-    final hadBirthday =
-        (now.month > dob.month) ||
+    final hadBirthday = (now.month > dob.month) ||
         (now.month == dob.month && now.day >= dob.day);
     if (!hadBirthday) age--;
     return age;
@@ -1191,9 +1184,8 @@ class _AgePyramidCard extends StatelessWidget {
       child: SizedBox(
         height: 280,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .snapshots(),
+          stream:
+              FirebaseFirestore.instance.collection('dengue_cases').snapshots(),
           builder: (context, snap) {
             final male = List<int>.filled(_bands.length, 0);
             final female = List<int>.filled(_bands.length, 0);
@@ -1401,7 +1393,6 @@ class _HighRiskZonesCardState extends State<_HighRiskZonesCard> {
             ],
           ),
           const SizedBox(height: 12),
-
           SizedBox(
             height: 260 - 44,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -1421,13 +1412,12 @@ class _HighRiskZonesCardState extends State<_HighRiskZonesCard> {
                     final day = DateTime(dt.year, dt.month, dt.day);
                     if (day.isBefore(
                       DateTime(start.year, start.month, start.day),
-                    ))
+                    )) {
                       continue;
+                    }
 
-                    final type = (m['type'] ?? '')
-                        .toString()
-                        .toLowerCase()
-                        .trim();
+                    final type =
+                        (m['type'] ?? '').toString().toLowerCase().trim();
                     if (type.isNotEmpty &&
                         !(type == 'new' ||
                             type == 'case' ||
@@ -1616,9 +1606,8 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
       child: SizedBox(
         height: 260,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .snapshots(),
+          stream:
+              FirebaseFirestore.instance.collection('dengue_cases').snapshots(),
           builder: (context, snap) {
             final cur = List<int>.filled(maxDays, 0);
             final prev = List<int>.filled(maxDays, 0);
@@ -1630,10 +1619,12 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
                 final dt = ts.toDate();
                 if (dt.month != month) continue;
                 final di = dt.day - 1;
-                if (dt.year == thisYear && di >= 0 && di < maxDays)
+                if (dt.year == thisYear && di >= 0 && di < maxDays) {
                   cur[di] += 1;
-                if (dt.year == lastYear && di >= 0 && di < maxDays)
+                }
+                if (dt.year == lastYear && di >= 0 && di < maxDays) {
                   prev[di] += 1;
+                }
               }
             }
 
@@ -1642,10 +1633,10 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
               ...prev,
             ].fold<int>(0, (p, c) => c > p ? c : p);
 
-            List<FlSpot> _spots(List<int> a) => [
-              for (int i = 0; i < maxDays; i++)
-                FlSpot((i + 1).toDouble(), a[i].toDouble()),
-            ];
+            List<FlSpot> spots(List<int> a) => [
+                  for (int i = 0; i < maxDays; i++)
+                    FlSpot((i + 1).toDouble(), a[i].toDouble()),
+                ];
 
             return LineChart(
               LineChartData(
@@ -1710,7 +1701,7 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
                     barWidth: 3,
                     color: AnalyticsPage.purple,
                     dotData: const FlDotData(show: false),
-                    spots: _spots(cur),
+                    spots: spots(cur),
                   ),
                   LineChartBarData(
                     isCurved: true,
@@ -1718,7 +1709,7 @@ class _SeasonalTrendTrackerCard extends StatelessWidget {
                     color: AnalyticsPage.purpleDim.withOpacity(.6),
                     dashArray: [6, 4],
                     dotData: const FlDotData(show: false),
-                    spots: _spots(prev),
+                    spots: spots(prev),
                   ),
                 ],
               ),
@@ -1745,9 +1736,8 @@ class _AvgReportingLagCard extends StatelessWidget {
       child: SizedBox(
         height: 140,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .snapshots(),
+          stream:
+              FirebaseFirestore.instance.collection('dengue_cases').snapshots(),
           builder: (context, snap) {
             double sum = 0;
             int n = 0;
@@ -2215,9 +2205,8 @@ class _MiniAreaChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double maxVal = data.isEmpty
-        ? 1
-        : data.reduce((a, b) => a > b ? a : b);
+    final double maxVal =
+        data.isEmpty ? 1 : data.reduce((a, b) => a > b ? a : b);
     final double top = maxVal <= 0 ? 1 : maxVal * 1.25;
 
     return LineChart(
