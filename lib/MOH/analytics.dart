@@ -276,19 +276,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                                       const SizedBox(height: 16),
 
-                                      // Row 2: New vs Transferred (stacked) — full width
-                                      _NewVsTransferredStackedCard(
-                                        mohArea: mohArea,
-                                      ),
+                                      // >>> REMOVED: New vs Transferred (stacked) card <<<
 
-                                      const SizedBox(height: 16),
-
-                                      // Row 3: Age pyramid — full width
+                                      // Next: Age pyramid — full width
                                       _AgePyramidCard(mohArea: mohArea),
 
                                       const SizedBox(height: 16),
 
-                                      // Row 4: Complaints → Cases conversion + Complaints Report (separate)
+                                      // Row: Complaints → Cases conversion + Complaints Report (separate)
                                       _RowWithReport(
                                         left:
                                             _ComplaintsConversionBubbleGridCard(
@@ -957,181 +952,6 @@ class _YearlyCasesBarCard extends StatelessWidget {
                 minY: 0,
               ),
               swapAnimationDuration: const Duration(milliseconds: 400),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-// ================== New vs Transferred (stacked monthly) ==================
-class _NewVsTransferredStackedCard extends StatelessWidget {
-  final String mohArea;
-  const _NewVsTransferredStackedCard({required this.mohArea});
-
-  static const _months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      title: "New vs Transferred (last 12 months)",
-      tabHint: "Stacked columns",
-      child: SizedBox(
-        height: 280,
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('dengue_cases')
-              .where('patient_moh_area', whereIn: areaKeys(mohArea))
-              .snapshots(),
-          builder: (context, snap) {
-            final now = DateTime.now();
-            final start = DateTime(now.year, now.month - 11, 1); // rolling 12m
-            final newCounts = List<int>.filled(12, 0);
-            final transferCounts = List<int>.filled(12, 0);
-
-            if (snap.hasData) {
-              for (final doc in snap.data!.docs) {
-                final m = doc.data();
-                final ts = m['date_of_admission'];
-                if (ts is! Timestamp) continue;
-                final dt = ts.toDate();
-                if (dt.isBefore(start) ||
-                    dt.isAfter(DateTime(now.year, now.month + 1, 0))) {
-                  continue;
-                }
-                final monthIdx =
-                    (dt.year - start.year) * 12 + (dt.month - start.month);
-                if (monthIdx < 0 || monthIdx > 11) continue;
-
-                final type = (m['type'] ?? '').toString().toLowerCase().trim();
-                if (type == 'transferred' || type == 'transfer') {
-                  transferCounts[monthIdx] += 1;
-                } else {
-                  // default bucket = New
-                  newCounts[monthIdx] += 1;
-                }
-              }
-            }
-
-            final totalPerMonth = List<int>.generate(
-              12,
-              (i) => newCounts[i] + transferCounts[i],
-            );
-            final maxVal = totalPerMonth.isEmpty
-                ? 1
-                : totalPerMonth.reduce((a, b) => a > b ? a : b);
-            final groups = <BarChartGroupData>[];
-            for (var i = 0; i < 12; i++) {
-              final n = newCounts[i].toDouble();
-              final t = transferCounts[i].toDouble();
-              groups.add(
-                BarChartGroupData(
-                  x: i,
-                  barRods: [
-                    BarChartRodData(
-                      toY: n + t,
-                      width: 16,
-                      borderRadius: BorderRadius.circular(4),
-                      rodStackItems: [
-                        BarChartRodStackItem(0, n, const Color(0xFF6EA8FE)),
-                        BarChartRodStackItem(n, n + t, const Color(0xFFFF6B6B)),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return Column(
-              children: [
-                Expanded(
-                  child: BarChart(
-                    BarChartData(
-                      borderData: FlBorderData(show: false),
-                      gridData: FlGridData(
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine: (value) =>
-                            FlLine(color: AnalyticsPage.border, strokeWidth: 1),
-                      ),
-                      titlesData: FlTitlesData(
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 40,
-                            getTitlesWidget: (v, m) => Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: Text(
-                                v.toInt().toString(),
-                                style: const TextStyle(
-                                  color: AnalyticsPage.subtext,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (v, m) {
-                              final idx = v.toInt();
-                              if (idx < 0 || idx > 11) {
-                                return const SizedBox.shrink();
-                              }
-                              final dt = DateTime(
-                                now.year,
-                                now.month - 11 + idx,
-                                1,
-                              );
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  _months[dt.month - 1],
-                                  style: const TextStyle(
-                                    color: AnalyticsPage.subtext,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      barGroups: groups,
-                      maxY: (maxVal == 0 ? 1 : (maxVal * 1.2)).toDouble(),
-                      minY: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: const [
-                    _LegendDot(color: Color(0xFF6EA8FE), label: 'New'),
-                    SizedBox(width: 14),
-                    _LegendDot(color: Color(0xFFFF6B6B), label: 'Transferred'),
-                  ],
-                ),
-              ],
             );
           },
         ),

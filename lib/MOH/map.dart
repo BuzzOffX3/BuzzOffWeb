@@ -136,8 +136,9 @@ class _MapPageState extends State<MapPage> {
 
   // Browser key from <meta name="gmaps-key" content="..."> (or dart-define in tests)
   String get _apiKey {
-    if (_isTestMode && kTestApiKey.isNotEmpty)
+    if (_isTestMode && kTestApiKey.isNotEmpty) {
       return kTestApiKey; // use fake key in tests if provided
+    }
     final el = dom.document.querySelector('meta[name="gmaps-key"]');
     return el?.getAttribute('content') ?? '';
   }
